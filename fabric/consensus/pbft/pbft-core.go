@@ -667,7 +667,7 @@ func (instance *pbftCore) sendPrePrepare(reqBatch *RequestBatch, digest string) 
 	cert.digest = digest
 	instance.persistQSet()
 	instance.innerBroadcast(&Message{Payload: &Message_PrePrepare{PrePrepare: preprep}})
-	instance.maybeSendCommit(digest, instance.view, n)
+	//instance.maybeSendCommit(digest, instance.view, n)
 }
 
 func (instance *pbftCore) resubmitRequestBatches() {
@@ -769,7 +769,9 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 		cert.sentPrepare = true
 		instance.persistQSet()
 		instance.recvPrepare(prep)
-		return instance.innerBroadcast(&Message{Payload: &Message_Prepare{Prepare: prep}})
+		//return instance.innerBroadcast(&Message{Payload: &Message_Prepare{Prepare: prep}})
+		//发给主节点
+		instance.innerBroadcastToPrimary(&Message{Payload: &Message_Prepare{Prepare: prep}})
 	}
 
 	return nil
@@ -804,7 +806,12 @@ func (instance *pbftCore) recvPrepare(prep *Prepare) error {
 	}
 	cert.prepare = append(cert.prepare, prep)
 	instance.persistPSet()
-
+	
+	//主节点收集到足够的prepare消息后聚合签名
+	if len(cert.prepare) >= instance.f * 2 + 1{
+		
+	}
+	
 	return instance.maybeSendCommit(prep.BatchDigest, prep.View, prep.SequenceNumber)
 }
 
@@ -1318,6 +1325,42 @@ func (instance *pbftCore) innerBroadcast(msg *Message) error {
 	}
 	return nil
 }
+
+func (instance *pbftCore) innerBroadcastToPrimary(msg *Message) error {
+	msgRaw, err := proto.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("Cannot marshal message %s", err)
+	}
+
+	doByzantine := false
+	if instance.byzantine {
+		rand1 := rand.New(rand.NewSource(time.Now().UnixNano()))
+		doIt := rand1.Intn(3) // go byzantine about 1/3 of the time
+		if doIt == 1 {
+			doByzantine = true
+		}
+	}
+
+	// testing byzantine fault.
+	if doByzantine {
+		rand2 := rand.New(rand.NewSource(time.Now().UnixNano()))
+		ignoreidx := rand2.Intn(instance.N)
+		for i := 0; i < instance.N; i++ {
+			if i != ignoreidx && uint64(i) != instance.id { //Pick a random replica and do not send message
+				instance.consumer.unicast(msgRaw, uint64(i))
+			} else {
+				logger.Debugf("PBFT byzantine: not broadcasting to replica %v", i)
+			}
+		}
+	} else {
+		instance.consumer.unicast(msgRaw, instance.primary(instance.view))
+	}
+	return nil
+}
+
+
+
+
 
 func (instance *pbftCore) updateViewChangeSeqNo() {
 	if instance.viewChangePeriod <= 0 {
