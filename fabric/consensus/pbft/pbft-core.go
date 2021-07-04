@@ -181,6 +181,7 @@ type pbftCore struct {
 	sigs []*g2pubs.Signature//存储prepare2消息的签名
 	pks []*g2pubs.PublicKey//存储各个节点的公钥
 	ids []uint64//签名的对应节点
+	prepare2_num int//记录收到的prepare2消息数量
 }
 
 type qidx struct {
@@ -322,6 +323,7 @@ func newPbftCore(id uint64, config *viper.Viper, consumer innerStack, etf events
 	instance.sigs = []*g2pubs.Signature{}
 	instance.pks = []*g2pubs.PublicKey{}
 	instance.ids = []uint64{}
+	instance.prepare2_num = 0
 
 	return instance
 }
@@ -359,6 +361,8 @@ func (instance *pbftCore) ProcessEvent(e events.Event) events.Event {
 		err = instance.recvPrepare(et)
 	case *Prepare2:
 		err = instance.recvPrepare2(et)
+	case *Ack:
+		err = instance.recvAck(et)
 	case *Commit:
 		err = instance.recvCommit(et)
 	case *Checkpoint:
@@ -620,6 +624,12 @@ func (instance *pbftCore) recvMsg(msg *Message, senderID uint64) (interface{}, e
 	} else if reqBatch := msg.GetReturnRequestBatch(); reqBatch != nil {
 		// it's ok for sender ID and replica ID to differ; we're sending the original request message
 		return returnRequestBatchEvent(reqBatch), nil
+	} else if prep2 := msg.GetPrepare2(); prep2 != nil {
+		// it's ok for sender ID and replica ID to differ; we're sending the original request message
+		return prep2, nil
+	} else if ack := msg.GetAck(); ack != nil {
+		// it's ok for sender ID and replica ID to differ; we're sending the original request message
+		return ack, nil
 	}
 	return nil, fmt.Errorf("Invalid message: %v", msg)
 }
@@ -657,11 +667,11 @@ func (instance *pbftCore) sendPrePrepare(reqBatch *RequestBatch, digest string) 
 		}
 	}
 
-	if !instance.inWV(instance.view, n) || n > instance.h+instance.L/2 {
+	/*if !instance.inWV(instance.view, n) || n > instance.h+instance.L/2 {
 		// We don't have the necessary stable certificates to advance our watermarks
 		logger.Warningf("Primary %d not sending pre-prepare for batch %s - out of sequence numbers", instance.id, digest)
 		return
-	}
+	}*/
 
 	if n > instance.viewChangeSeqNo {
 		logger.Info("Primary %d about to switch to next primary, not sending pre-prepare with seqno=%d", instance.id, n)
@@ -730,7 +740,7 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 		return nil
 	}
 
-	if !instance.inWV(preprep.View, preprep.SequenceNumber) {
+	/*if !instance.inWV(preprep.View, preprep.SequenceNumber) {
 		if preprep.SequenceNumber != instance.h && !instance.skipInProgress {
 			logger.Warningf("Replica %d pre-prepare view different, or sequence number outside watermarks: preprep.View %d, expected.View %d, seqNo %d, low-mark %d", instance.id, preprep.View, instance.primary(instance.view), preprep.SequenceNumber, instance.h)
 		} else {
@@ -739,7 +749,17 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 		}
 
 		return nil
+	}*/
+	if preprep.View < instance.view{
+		logger.Info("Replica %d received pre-prepare for %d, which should be from the last primary", instance.id, preprep.SequenceNumber)
+		instance.sendViewChange()
+		return nil
+	}if preprep.SequenceNumber < instance.seqNo{
+		logger.Info("Replica %d received pre-prepare for %d, which should be from the last primary", instance.id, preprep.SequenceNumber)
+		instance.sendViewChange()
+		return nil
 	}
+	
 
 	if preprep.SequenceNumber > instance.viewChangeSeqNo {
 		logger.Info("Replica %d received pre-prepare for %d, which should be from the next primary", instance.id, preprep.SequenceNumber)
@@ -813,6 +833,19 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		logger.Warningf("Replica %d received prepare from primary, ignoring", instance.id)
 		return nil
 	}
+	
+	//上个视图的prepare2消息
+	if prep.View < instance.view{
+		return nil
+	}
+	if prep.SequenceNumber < instance.seqNo{
+		return nil
+	}
+	
+	//已发送聚合签名
+	if instance.prepare2_num >= instance.f * 2{
+		return nil
+	}
 
 	/*if !instance.inWV(prep.View, prep.SequenceNumber) {
 		if prep.SequenceNumber != instance.h && !instance.skipInProgress {
@@ -825,6 +858,8 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	}*/
 
 	cert := instance.getCert(prep.View, prep.SequenceNumber)
+	instance.prepare2_num++
+	
 
 	for _, prevPrep := range cert.prepare {
 		if prevPrep.ReplicaId == prep.ReplicaId {
@@ -844,7 +879,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	instance.ids := append(instance.ids, prep.ReplicaId)
 	
 	//主节点收集到足够的prepare消息后聚合签名
-	if len(cert.prepare) >= instance.f * 2 {
+	if instance.prepare2_num >= instance.f * 2 {
 		//主节点自己也要签名
 		sk, err := g2pubs.RandKey(rand.Reader)
 		if err != nil{
@@ -868,7 +903,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		//聚合签名
 		asig := g2pubs.AggregateSignatures(instance.sigs)
 		basig := asig.Serialize()
-		ack := &ACK{
+		ack := &Ack{
 			View:           view, 
 			SequenceNumber: n,
 			BatchDigest:    digest,
@@ -877,14 +912,90 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 			Replicas:       instance.ids,
 			ReplicaId:      instance.id,
 		}
-		return instance.innerBroadcast(&Message{Payload: &Message_ACK{ACK: ack}})
-		
-		
-		
+		//自己也收到ack
+		instance.recvAck(ack)
+		return instance.innerBroadcast(&Message{Payload: &Message_Ack{Ack: ack}})	
 	}
 	
 	//return instance.maybeSendCommit(prep.BatchDigest, prep.View, prep.SequenceNumber)
 }
+
+
+func (instance *pbftCore) recvAck(ack *Ack) error {
+	logger.Debugf("Replica %d received prepare from replica %d for view=%d/seqNo=%d",
+		instance.id, ack.ReplicaId, ack.View, ack.SequenceNumber)
+
+	if instance.primary(ack.View) != ack.ReplicaId {
+		logger.Warningf("Replica %d received prepare not from primary, ignoring", instance.id)
+		return nil
+	}
+	
+	if ack.View < instance.view{
+		return nil
+	}
+	if ack.SequenceNumber < instance.seqNo{
+		return nil
+	}
+	/*if !instance.inWV(prep.View, prep.SequenceNumber) {
+		if prep.SequenceNumber != instance.h && !instance.skipInProgress {
+			logger.Warningf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
+		} else {
+			// This is perfectly normal
+			logger.Debugf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
+		}
+		return nil
+	}*/
+
+	cert := instance.getCert(ack.View, ack.SequenceNumber)
+	
+	
+	//验证聚合签名
+	basig := ack.Asig
+	asig := g2pubs.DeserializeSignature(basig)
+	bpks := ack.PublicKeys
+	for i := 0; i < len(bpks); i = i + 96{
+		b1 := bpks[i: i + 96]
+		pk := g2pubs.DeserializeSignature(b1)
+		result := g2pubs.Verify(ack.BatchDigest, pk, asig)
+		if result == false{
+			logger.Warningf("Verify failed")
+			return nil
+		}
+	}
+	
+	//验证成功
+	//补充cert.prepare和cert.commit
+	for rid := rane(ack.Replicas){
+		prep := &Prepare{
+			View:           ack.View,
+			SequenceNumber: ack.SequenceNumber,
+			BatchDigest:    ack.BatchDigest,
+			ReplicaId:      rid,
+		}
+		cert.prepare = append(cert.prepare, prep)
+		commit := &Commit{
+			View:           ack.View,
+			SequenceNumber: ack.SequenceNumber,
+			BatchDigest:    ack.BatchDigest,
+			ReplicaId:      rid,
+		}
+		cert.commit = append(cert.commit. commit)
+	}
+	//上链
+	instance.lastNewViewTimeout = instance.newViewTimeout
+	delete(instance.outstandingReqBatches, commit.BatchDigest)
+
+	instance.executeOutstanding()
+
+	if commit.SequenceNumber == instance.viewChangeSeqNo {
+		logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, commit.SequenceNumber)
+		instance.sendViewChange()
+	}
+	return nil
+}
+
+
+
 
 //
 func (instance *pbftCore) maybeSendCommit(digest string, v uint64, n uint64) error {
