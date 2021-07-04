@@ -32,6 +32,8 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
+	
+	"github.com/bls"
 )
 
 // =============================================================================
@@ -760,15 +762,23 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 
 	if instance.primary(instance.view) != instance.id && instance.prePrepared(preprep.BatchDigest, preprep.View, preprep.SequenceNumber) && !cert.sentPrepare {
 		logger.Debugf("Backup %d broadcasting prepare for view=%d/seqNo=%d", instance.id, preprep.View, preprep.SequenceNumber)
+		//======================================================
+		//签名
+		m1 := bls.Message([]byte(preprep.BatchDigest))
+		sk, pk := blsMgr.GenerateKey()
+		sig := sk.Sign(m1)
+	
 		prep := &Prepare{
 			View:           preprep.View,
 			SequenceNumber: preprep.SequenceNumber,
 			BatchDigest:    preprep.BatchDigest,
 			ReplicaId:      instance.id,
+			PublicKey:      pk,
+			Signature:      sig,
 		}
 		cert.sentPrepare = true
 		instance.persistQSet()
-		instance.recvPrepare(prep)
+		//instance.recvPrepare(prep)
 		//return instance.innerBroadcast(&Message{Payload: &Message_Prepare{Prepare: prep}})
 		//发给主节点
 		instance.innerBroadcastToPrimary(&Message{Payload: &Message_Prepare{Prepare: prep}})
@@ -808,7 +818,26 @@ func (instance *pbftCore) recvPrepare(prep *Prepare) error {
 	instance.persistPSet()
 	
 	//主节点收集到足够的prepare消息后聚合签名
-	if len(cert.prepare) >= instance.f * 2 + 1{
+	if len(cert.prepare) >= instance.f * 2 {
+		//主节点自己也要签名
+		m1 := bls.Message([]byte(prep.BatchDigest))
+		sk, pk := blsMgr.GenerateKey()
+		sig := sk.Sign(m1)
+	
+		prep := &Prepare{
+			View:           prep.View,
+			SequenceNumber: prep.SequenceNumber,
+			BatchDigest:    prep.BatchDigest,
+			ReplicaId:      instance.id,
+			PublicKey:      pk,
+			Signature:      sig,
+		}
+		cert.sentPrepare = true
+		instance.persistQSet()
+		
+		
+		//聚合签名
+		
 		
 	}
 	
