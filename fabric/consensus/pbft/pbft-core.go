@@ -32,8 +32,9 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
+	"github.com/phoreproject/bls/g2pubs"
+	crand "crypto/rand"
 	
-	"github.com/bls"
 )
 
 // =============================================================================
@@ -174,6 +175,12 @@ type pbftCore struct {
 	checkpointStore map[Checkpoint]bool      // track checkpoints as set
 	viewChangeStore map[vcidx]*ViewChange    // track view-change messages
 	newViewStore    map[uint64]*NewView      // track last new-view we received or sent
+	
+	
+	
+	sigs []*g2pubs.Signature//存储prepare2消息的签名
+	pks []*g2pubs.PublicKey//存储各个节点的公钥
+	ids []uint64//签名的对应节点
 }
 
 type qidx struct {
@@ -311,6 +318,10 @@ func newPbftCore(id uint64, config *viper.Viper, consumer innerStack, etf events
 
 	instance.viewChangeSeqNo = ^uint64(0) // infinity
 	instance.updateViewChangeSeqNo()
+	
+	instance.sigs = []*g2pubs.Signature{}
+	instance.pks = []*g2pubs.PublicKey{}
+	instance.ids = []uint64{}
 
 	return instance
 }
@@ -346,6 +357,8 @@ func (instance *pbftCore) ProcessEvent(e events.Event) events.Event {
 		err = instance.recvPrePrepare(et)
 	case *Prepare:
 		err = instance.recvPrepare(et)
+	case *Prepare2:
+		err = instance.recvPrepare2(et)
 	case *Commit:
 		err = instance.recvCommit(et)
 	case *Checkpoint:
@@ -764,30 +777,35 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 		logger.Debugf("Backup %d broadcasting prepare for view=%d/seqNo=%d", instance.id, preprep.View, preprep.SequenceNumber)
 		//======================================================
 		//签名
-		m1 := bls.Message([]byte(preprep.BatchDigest))
-		sk, pk := blsMgr.GenerateKey()
-		sig := sk.Sign(m1)
+		sk, err := g2pubs.RandKey(rand.Reader)
+		if err != nil{
+			fmt.Println("generate key error")
+		}
+		pk := g2pubs.PrivToPub(sk)
+		sig := g2pubs.Sign(preprep.BatchDigest, sk)
+		bpk := pk.Serialize()
+		bsig := sig.Serialize()
 	
-		prep := &Prepare{
+		prep := &Prepare2{
 			View:           preprep.View,
 			SequenceNumber: preprep.SequenceNumber,
 			BatchDigest:    preprep.BatchDigest,
 			ReplicaId:      instance.id,
-			PublicKey:      pk,
-			Signature:      sig,
+			PublicKey:      bpk,
+			Signature:      bsig,
 		}
 		cert.sentPrepare = true
 		instance.persistQSet()
 		//instance.recvPrepare(prep)
 		//return instance.innerBroadcast(&Message{Payload: &Message_Prepare{Prepare: prep}})
 		//发给主节点
-		instance.innerBroadcastToPrimary(&Message{Payload: &Message_Prepare{Prepare: prep}})
+		instance.innerBroadcastToPrimary(&Message{Payload: &Message_Prepare2{Prepare2: prep}})
 	}
 
 	return nil
 }
 
-func (instance *pbftCore) recvPrepare(prep *Prepare) error {
+func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	logger.Debugf("Replica %d received prepare from replica %d for view=%d/seqNo=%d",
 		instance.id, prep.ReplicaId, prep.View, prep.SequenceNumber)
 
@@ -796,7 +814,7 @@ func (instance *pbftCore) recvPrepare(prep *Prepare) error {
 		return nil
 	}
 
-	if !instance.inWV(prep.View, prep.SequenceNumber) {
+	/*if !instance.inWV(prep.View, prep.SequenceNumber) {
 		if prep.SequenceNumber != instance.h && !instance.skipInProgress {
 			logger.Warningf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
 		} else {
@@ -804,7 +822,7 @@ func (instance *pbftCore) recvPrepare(prep *Prepare) error {
 			logger.Debugf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
 		}
 		return nil
-	}
+	}*/
 
 	cert := instance.getCert(prep.View, prep.SequenceNumber)
 
@@ -814,34 +832,58 @@ func (instance *pbftCore) recvPrepare(prep *Prepare) error {
 			return nil
 		}
 	}
-	cert.prepare = append(cert.prepare, prep)
-	instance.persistPSet()
+	//cert.prepare = append(cert.prepare, prep)
+	//instance.persistPSet()
+	
+	
+	//从prepare2消息中收集签名和公钥
+	pk2, _ := g2pubs.DeserializePublicKey(prep.PublicKey)
+	sig1, _ := g2pubs.DeserializeSignature(prep.Signature)
+	instance.pks = append(instance.pks, pk2)
+	instance.sigs = append(instance.sigs, sig2)
+	instance.ids := append(instance.ids, prep.ReplicaId)
 	
 	//主节点收集到足够的prepare消息后聚合签名
 	if len(cert.prepare) >= instance.f * 2 {
 		//主节点自己也要签名
-		m1 := bls.Message([]byte(prep.BatchDigest))
-		sk, pk := blsMgr.GenerateKey()
-		sig := sk.Sign(m1)
-	
-		prep := &Prepare{
-			View:           prep.View,
-			SequenceNumber: prep.SequenceNumber,
-			BatchDigest:    prep.BatchDigest,
-			ReplicaId:      instance.id,
-			PublicKey:      pk,
-			Signature:      sig,
+		sk, err := g2pubs.RandKey(rand.Reader)
+		if err != nil{
+			fmt.Println("generate key error")
 		}
-		cert.sentPrepare = true
-		instance.persistQSet()
+		pk := g2pubs.PrivToPub(sk)
+		sig := g2pubs.Sign(prep.BatchDigest, sk)
+		instance.pks = append(instance.pks, pk)
+		instance.sigs = append(instance.sigs, sig)
 		
+		//将公钥转为[]byte
+		bpks := []byte{}
+		for key := range(instance.pks){
+			b := key..Serialize()
+			for i := 0; i < len(b); i++{
+				bpks := append(bpks, b[i])
+			}
+		}
+			
 		
 		//聚合签名
+		asig := g2pubs.AggregateSignatures(instance.sigs)
+		basig := asig.Serialize()
+		ack := &ACK{
+			View:           view, 
+			SequenceNumber: n,
+			BatchDigest:    digest,
+			Asig:           basig,
+			PublicKeys:     bpks,
+			Replicas:       instance.ids,
+			ReplicaId:      instance.id,
+		}
+		return instance.innerBroadcast(&Message{Payload: &Message_ACK{ACK: ack}})
+		
 		
 		
 	}
 	
-	return instance.maybeSendCommit(prep.BatchDigest, prep.View, prep.SequenceNumber)
+	//return instance.maybeSendCommit(prep.BatchDigest, prep.View, prep.SequenceNumber)
 }
 
 //
