@@ -45,6 +45,9 @@ message message {
         new_view new_view = 7;
         fetch_request_batch fetch_request_batch = 8;
         request_batch return_request_batch = 9;
+	prepare2 prepare2 = 10;
+	ack ack = 11;
+	finish finish = 12;
     }
 }
 
