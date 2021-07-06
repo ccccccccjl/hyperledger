@@ -98,6 +98,9 @@ type Message_Prepare2 struct {
 type Message_Ack struct{
 	Ack *Ack `protobuf:"bytes,11,opt,name=ack,oneof"`
 }
+type Message_Finish struct{
+	Finish *Finish `protobuf:"bytes,12,opt,name=finish,oneof"`
+}
 
 func (*Message_RequestBatch) isMessage_Payload()       {}
 func (*Message_PrePrepare) isMessage_Payload()         {}
@@ -110,6 +113,7 @@ func (*Message_FetchRequestBatch) isMessage_Payload()  {}
 func (*Message_ReturnRequestBatch) isMessage_Payload() {}
 func (*Message_Prepare2) isMessage_Payload()            {}
 func (*Message_Ack) isMessage_Payload()            {}
+func (*Message_Finish) isMessage_Payload()            {}
 
 func (m *Message) GetPayload() isMessage_Payload {
 	if m != nil {
@@ -195,6 +199,13 @@ func (m *Message) GetAck() *Ack {
 	return nil
 }
 
+func (m *Message) GetFinish() *Finish {
+	if x, ok := m.GetPayload().(*Message_Finish); ok {
+		return x.Finish
+	}
+	return nil
+}
+
 // XXX_OneofFuncs is for the internal use of the proto package.
 func (*Message) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
 	return _Message_OneofMarshaler, _Message_OneofUnmarshaler, _Message_OneofSizer, []interface{}{
@@ -209,6 +220,7 @@ func (*Message) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error
 		(*Message_ReturnRequestBatch)(nil),
 		(*Message_Prepare2)(nil),
 		(*Message_Ack)(nil),
+		(*Message_Finish)(nil),
 	}
 }
 
@@ -266,9 +278,14 @@ func _Message_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 		if err := b.EncodeMessage(x.Prepare2); err != nil {
 			return err
 		}
-	case *Message_PrepareAck:
+	case *Message_Ack:
 		b.EncodeVarint(11<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.Ack); err != nil {
+			return err
+		}
+	case *Message_Finish:
+		b.EncodeVarint(12<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Finish); err != nil {
 			return err
 		}
 	case nil:
@@ -369,6 +386,14 @@ func _Message_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer
 		err := b.DecodeMessage(msg)
 		m.Payload = &Message_Ack{msg}
 		return true, err
+	case 12: // payload.return_request_batch
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Finish)
+		err := b.DecodeMessage(msg)
+		m.Payload = &Message_Finish{msg}
+		return true, err
 	default:
 		return false, nil
 	}
@@ -431,6 +456,11 @@ func _Message_OneofSizer(msg proto.Message) (n int) {
 	case *Message_Ack:
 		s := proto.Size(x.Ack)
 		n += proto.SizeVarint(11<<3 | proto.WireBytes)
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *Message_Finish:
+		s := proto.Size(x.Finish)
+		n += proto.SizeVarint(12<<3 | proto.WireBytes)
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case nil:
@@ -869,6 +899,21 @@ func (m *Ack) String() string            { return proto.CompactTextString(m) }
 func (*Ack) ProtoMessage()               {}
 func (*Ack) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
 
+
+type Finish struct {
+	View           uint64 `protobuf:"varint,1,opt,name=view" json:"view,omitempty"`
+	SequenceNumber uint64 `protobuf:"varint,2,opt,name=sequence_number,json=sequenceNumber" json:"sequence_number,omitempty"`
+	ReplicaId      uint64 `protobuf:"varint,3,opt,name=replica_id,json=replicaId" json:"replica_id,omitempty"`
+	
+}
+
+func (m *Finish) Reset()                    { *m = Finish }
+func (m *Finish) String() string            { return proto.CompactTextString(m) }
+func (*Finish) ProtoMessage()               {}
+func (*Finish) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
+
+
+
 func init() {
 	proto.RegisterType((*Message)(nil), "pbft.message")
 	proto.RegisterType((*Request)(nil), "pbft.request")
@@ -886,8 +931,9 @@ func init() {
 	proto.RegisterType((*RequestBatch)(nil), "pbft.request_batch")
 	proto.RegisterType((*BatchMessage)(nil), "pbft.batch_message")
 	proto.RegisterType((*Metadata)(nil), "pbft.metadata")
-	proto.RegisterType((*Metadata)(nil), "pbft.prepare2")
-	proto.RegisterType((*Metadata)(nil), "pbft.ack")
+	proto.RegisterType((*Prepare2)(nil), "pbft.prepare2")
+	proto.RegisterType((*Ack)(nil), "pbft.ack")
+	proto.RegisterType((*Finish)(nil), "pbft.finish")
 }
 
 func init() { proto.RegisterFile("messages.proto", fileDescriptor0) }
