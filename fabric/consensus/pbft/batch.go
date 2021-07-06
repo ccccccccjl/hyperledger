@@ -141,9 +141,10 @@ func (op *obcBatch) submitToLeader(req *Request) events.Event {
 	op.logAddTxFromRequest(req)
 	op.reqStore.storeOutstanding(req)
 	op.startTimerIfOutstandingRequests()
-	if op.pbft.primary(op.pbft.view) == op.pbft.id && op.pbft.activeView {
+	op.pbft.clientsRequests = append(op.pbft.clientsRequest, req)
+	/*if op.pbft.primary(op.pbft.view) == op.pbft.id && op.pbft.activeView {
 		return op.leaderProcReq(req)
-	}
+	}*/
 	return nil
 }
 
@@ -218,22 +219,25 @@ func (op *obcBatch) execute(seqNo uint64, reqBatch *RequestBatch) {
 // functions specific to batch mode
 // =============================================================================
 
-func (op *obcBatch) leaderProcReq(req *Request) events.Event {
-	// XXX check req sig
-	digest := hash(req)
-	logger.Debugf("Batch primary %d queueing new request %s", op.pbft.id, digest)
-	op.batchStore = append(op.batchStore, req)
-	op.reqStore.storePending(req)
-
-	if !op.batchTimerActive {
-		op.startBatchTimer()
-	}
-
-	if len(op.batchStore) >= op.batchSize {
+func (op *obcBatch) leaderProcReq() events.Event {
+	//有足够数量的request
+	if len(op.pbft.clientsRequests) - op.pbft.notConsensused >= op.batchSize{
+		for i := op.pbft.notConsensused; i < op.pbft.notConsensused + op.batchSize; i++{
+			req := op.pbft.clientsRequests[i]
+			digest := hash(req)
+			op.batchStore = append(op.batchStore, req)
+			op.reqStore.storePending(req)
+		}
+		return op.sendBatch()
+	}else{
+		for i := op.pbft.notConsensused; i < len(op.pbft.clientsRequests); i++{
+			req := op.pbft.clientsRequests[i]
+			digest := hash(req)
+			op.batchStore = append(op.batchStore, req)
+			op.reqStore.storePending(req)
+		}
 		return op.sendBatch()
 	}
-
-	return nil
 }
 
 func (op *obcBatch) sendBatch() events.Event {
@@ -289,10 +293,8 @@ func (op *obcBatch) processMessage(ocMsg *pb.Message, senderHandle *pb.PeerID) e
 
 		op.logAddTxFromRequest(req)
 		op.reqStore.storeOutstanding(req)
-		if (op.pbft.primary(op.pbft.view) == op.pbft.id) && op.pbft.activeView {
-			return op.leaderProcReq(req)
-		}
-		op.startTimerIfOutstandingRequests()
+		
+		//op.startTimerIfOutstandingRequests()
 		return nil
 	} else if pbftMsg := batchMsg.GetPbftMessage(); pbftMsg != nil {
 		senderID, err := getValidatorID(senderHandle) // who sent this?
@@ -426,6 +428,8 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 		// When the state is updated, clear any outstanding requests, they may have been processed while we were gone
 		op.reqStore = newRequestStore()
 		return op.pbft.ProcessEvent(event)
+	case packRequestEvent:
+		return op.leaderProcReq()
 	default:
 		return op.pbft.ProcessEvent(event)
 	}
