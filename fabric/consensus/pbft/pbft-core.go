@@ -1125,6 +1125,7 @@ func (instance *pbftCore) executeOutstanding2(view uint64, seq uint64) {
 	}
 	digest := cert.digest
 	reqBatch := instance.reqBatchStore[digest]
+	l := len(cert.prePrepare.RequestBatch.Batch)
 
 	// null request
 	if digest == "" {
@@ -1132,8 +1133,9 @@ func (instance *pbftCore) executeOutstanding2(view uint64, seq uint64) {
 			instance.id, idx.v, idx.n)
 		instance.execDoneSync(view, seq)
 	} else {
-		logger.Infof("Replica %d executing/committing request batch for view=%d/seqNo=%d and digest %s",
-			instance.id, view, seq, digest)
+		logger.Infof("Replica %d executing/committing request batch for view=%d/seqNo=%d, digest %s, it have %d requests", 
+			instance.id, view, seq, digest, l)
+		instance.notConsensused += l
 		// synchronously execute, it is the other side's responsibility to execute in the background if needed
 		instance.consumer.execute(seq, reqBatch)
 	}
