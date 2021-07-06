@@ -82,6 +82,8 @@ type returnRequestBatchEvent *RequestBatch
 // nullRequestEvent provides "keep-alive" null requests
 type nullRequestEvent struct{}
 
+type packRequestEvent struct{}
+
 // Unless otherwise noted, all methods consume the PBFT thread, and should therefore
 // not rely on PBFT accomplishing any work while that thread is being held
 type innerStack interface {
@@ -365,6 +367,8 @@ func (instance *pbftCore) ProcessEvent(e events.Event) events.Event {
 		err = instance.recvPrepare2(et)
 	case *Ack:
 		err = instance.recvAck(et)
+	case *Finish:
+		err = instance.recvFinish(et)
 	case *Commit:
 		err = instance.recvCommit(et)
 	case *Checkpoint:
@@ -632,6 +636,9 @@ func (instance *pbftCore) recvMsg(msg *Message, senderID uint64) (interface{}, e
 	} else if ack := msg.GetAck(); ack != nil {
 		// it's ok for sender ID and replica ID to differ; we're sending the original request message
 		return ack, nil
+	}else if finish := msg.GetFinish(); finish != nil {
+		// it's ok for sender ID and replica ID to differ; we're sending the original request message
+		return finish, nil
 	}
 	return nil, fmt.Errorf("Invalid message: %v", msg)
 }
@@ -1219,7 +1226,6 @@ func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
 	instance.pks = []*g2pubs.PublicKey{}//存储各个节点的公钥
 	instance.ids = []uint64{}//签名的对应节点
 	instance.prepare2_num = 0//记录收到的prepare2消息数量
-	instance.finish_num = 0
 	
 	cert := instance.getCert(view, seq)
 	//给下一个主节点发送finish消息
@@ -1238,11 +1244,17 @@ func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
 
 
 
-func (instance *pbftCore) recvFinish(finish *Finish){
+func (instance *pbftCore) recvFinish(finish *Finish) events.Event{
 	if finish.View != instance.view - 1 || finish.SequenceNumber != instance.seqNo - 1{
-		return
+		return nil
 	}
 	instance.finish_num++
+	
+	//开始打包交易入块
+	if instance.finish_num == instance.N / 2{
+		return packRequestsEvent{}
+	}
+	return nil
 }
 
 func (instance *pbftCore) moveWatermarks(n uint64) {
