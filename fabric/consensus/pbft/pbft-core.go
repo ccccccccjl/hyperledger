@@ -182,6 +182,7 @@ type pbftCore struct {
 	pks []*g2pubs.PublicKey//存储各个节点的公钥
 	ids []uint64//签名的对应节点
 	prepare2_num int//记录收到的prepare2消息数量
+	finish_num int//记录收到的finish消息数量
 }
 
 type qidx struct {
@@ -324,6 +325,7 @@ func newPbftCore(id uint64, config *viper.Viper, consumer innerStack, etf events
 	instance.pks = []*g2pubs.PublicKey{}
 	instance.ids = []uint64{}
 	instance.prepare2_num = 0
+	instance.finish_num = 0
 
 	return instance
 }
@@ -679,7 +681,7 @@ func (instance *pbftCore) sendPrePrepare(reqBatch *RequestBatch, digest string) 
 	}
 
 	logger.Debugf("Primary %d broadcasting pre-prepare for view=%d/seqNo=%d and digest %s", instance.id, instance.view, n, digest)
-	instance.seqNo = n
+	//instance.seqNo = n
 	preprep := &PrePrepare{
 		View:           instance.view,
 		SequenceNumber: n,
@@ -985,7 +987,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 	instance.lastNewViewTimeout = instance.newViewTimeout
 	delete(instance.outstandingReqBatches, commit.BatchDigest)
 
-	instance.executeOutstanding()
+	instance.executeOutstanding2(ask.View, ask.SequenceNumber)
 
 	if commit.SequenceNumber == instance.viewChangeSeqNo {
 		logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, commit.SequenceNumber)
@@ -1101,6 +1103,32 @@ func (instance *pbftCore) retryStateTransfer(optional *stateUpdateTarget) {
 
 }
 
+
+func (instance *pbftCore) executeOutstanding2(view uint64, seq uint64) {
+	
+	logger.Debugf("Replica %d attempting to executeOutstanding", instance.id)
+	
+	cert := instance.getCert(view, seq)
+	if cert == nil || cert.prePrepare == nil || len(cert.prepare) < 2 * instance.f + 1{
+		return 
+	}
+	digest := cert.digest
+	reqBatch := instance.reqBatchStore[digest]
+
+	// null request
+	if digest == "" {
+		logger.Infof("Replica %d executing/committing null request for view=%d/seqNo=%d",
+			instance.id, idx.v, idx.n)
+		instance.execDoneSync(view, seq)
+	} else {
+		logger.Infof("Replica %d executing/committing request batch for view=%d/seqNo=%d and digest %s",
+			instance.id, view, seq, digest)
+		// synchronously execute, it is the other side's responsibility to execute in the background if needed
+		instance.consumer.execute(seq, reqBatch)
+	}
+}
+
+
 func (instance *pbftCore) executeOutstanding() {
 	if instance.currentExec != nil {
 		logger.Debugf("Replica %d not attempting to executeOutstanding because it is currently executing %d", instance.id, *instance.currentExec)
@@ -1118,6 +1146,10 @@ func (instance *pbftCore) executeOutstanding() {
 
 	instance.startTimerIfOutstandingRequests()
 }
+
+
+
+
 
 func (instance *pbftCore) executeOne(idx msgID) bool {
 	cert := instance.certStore[idx]
@@ -1181,22 +1213,36 @@ func (instance *pbftCore) Checkpoint(seqNo uint64, id []byte) {
 	instance.innerBroadcast(&Message{Payload: &Message_Checkpoint{Checkpoint: chkpt}})
 }
 
-func (instance *pbftCore) execDoneSync() {
-	if instance.currentExec != nil {
-		logger.Infof("Replica %d finished execution %d, trying next", instance.id, *instance.currentExec)
-		instance.lastExec = *instance.currentExec
-		if instance.lastExec%instance.K == 0 {
-			instance.Checkpoint(instance.lastExec, instance.consumer.getState())
-		}
-
-	} else {
-		// XXX This masks a bug, this should not be called when currentExec is nil
-		logger.Warningf("Replica %d had execDoneSync called, flagging ourselves as out of date", instance.id)
-		instance.skipInProgress = true
+func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
+	//清空
+	instance.sigs = []*g2pubs.Signature{}//存储prepare2消息的签名
+	instance.pks = []*g2pubs.PublicKey{}//存储各个节点的公钥
+	instance.ids = []uint64{}//签名的对应节点
+	instance.prepare2_num = 0//记录收到的prepare2消息数量
+	instance.finish_num = 0
+	
+	cert := instance.getCert(view, seq)
+	//给下一个主节点发送finish消息
+	instance.view++
+	instance.seqNo++
+	
+	finish := &Finish{
+		View:           instance.view - 1,
+		SequenceNumber: instance.seqNo - 1,
+		BatchDigest:    cert.digest,
+		ReplicaId:      instance.id,
 	}
-	instance.currentExec = nil
+	instance.innerBroadcastToLeader(&Message{Payload: &Message_Finish{Finish: finish}})
+}
 
-	instance.executeOutstanding()
+
+
+
+func (instance *pbftCore) recvFinish(finish *Finish){
+	if finish.View != instance.view - 1 || finish.SequenceNumber != instance.seqNo - 1{
+		return
+	}
+	instance.finish_num++
 }
 
 func (instance *pbftCore) moveWatermarks(n uint64) {
@@ -1525,15 +1571,7 @@ func (instance *pbftCore) innerBroadcastToPrimary(msg *Message) error {
 
 	// testing byzantine fault.
 	if doByzantine {
-		rand2 := rand.New(rand.NewSource(time.Now().UnixNano()))
-		ignoreidx := rand2.Intn(instance.N)
-		for i := 0; i < instance.N; i++ {
-			if i != ignoreidx && uint64(i) != instance.id { //Pick a random replica and do not send message
-				instance.consumer.unicast(msgRaw, uint64(i))
-			} else {
-				logger.Debugf("PBFT byzantine: not broadcasting to replica %v", i)
-			}
-		}
+		logger.Wariningf("Byzantine peer, do not send message to leader");
 	} else {
 		instance.consumer.unicast(msgRaw, instance.primary(instance.view))
 	}
@@ -1598,153 +1636,4 @@ func (instance *pbftCore) stopTimer() {
 }
 
 
-/*
-***计票节点计票功能
-*/
-func (instance *pbftCore) recvPrepareClerk(prep *Prepare) error {
-	logger.Infof("Clerk %d received prepare from replica %d", instance.id, prep.ReplicaId)
-
-	if instance.ifKnowResult == true{
-		return nil
-	}
-	if instance.primary(prep.View) == prep.ReplicaId {
-		logger.Warningf("Replica %d received prepare from primary, ignoring", instance.id)
-		return nil
-	}
-
-	if !instance.inWV(prep.View, prep.SequenceNumber) {
-		if prep.SequenceNumber != instance.h && !instance.skipInProgress {
-			logger.Warningf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
-		} else {
-			// This is perfectly normal
-			logger.Debugf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
-		}
-		return nil
-	}
-
-	cert := instance.getCert(prep.View, prep.SequenceNumber)
-
-	for _, prevPrep := range cert.prepare {
-		if prevPrep.ReplicaId == prep.ReplicaId {
-			logger.Warningf("Ignoring duplicate prepare from %d", prep.ReplicaId)
-			return nil
-		}
-	}
-	cert.prepare = append(cert.prepare, prep)
-	instance.persistPSet()
-
-	if instance.prepared(prep.BatchDigest, prep.View, prep.SequenceNumber){
-		instance.ifKnowResult = true
-		instance.prepareFeedback(cert)
-	}
-	return nil
-}
-
-
-
-
-/*
-***计票节点返回计票结果
-***把cert.prepare封装到消息中传给其他节点
-*/
-func (instance *pbftCore) prepareFeedback(cert *msgCert){
-	//把cert.prepare转为[]byte
-	data := []byte{}
-	for pre := range(cert.prepare){
-		//s := pre.String()
-		b1 := make([]byte, 8)
-		binary.BigEndian.PutUint64(b1, pre.View)
-		for i := 0; i < len(b1); i++{
-			data = append(data, b1[i])
-		}
-		binary.BigEndian.PutUint64(b1, pre.SequenceNumber)
-		for i := 0; i < len(b1); i++{
-			data = append(data, b1[i])
-		}
-		binary.BigEndian.PutUint64(b1, pre.ReplicaID)
-		for i := 0; i < len(b1); i++{
-			data = append(data, b1[i])
-		}
-		b2 := []byte(pre.BatchDigest)
-		data = append(data, byte(len(b2)))
-		for i := 0; i < len(b2); i++{
-			data = append(data, b2[i])
-		}
-	}
-
-	//发送消息
-	ocMsg := &pb.Message{
-		Type:    pb.Message_FEEDBACK,
-		Payload: data,
-	}
-	instance.innerBroadcast(ocMsg)
-}
-
-
-/*
-***节点接收到投票结果后的处理
-***补充cert.commit
-*/
-func (instance *pbftCore) dealFeedback(event events.Event){
-	if instance.ifKnowResult ==false{
-		instance.ifKnowResult = true
-		if instance.ifClerking == true{//计票节点停止计票
-			instance.ifClerking = false
-		}
-		//更新cert.prepare
-		data := event.([]byte)
-		var view []byte
-		var seq []byte
-		var repid []byte
-		var digest []byte
-		var dlength byte
-		for i := 0; i < len(data); {
-			//还原cert.prepare[i]
-			view = data[i: i + 8]
-			seq = data[i + 8: i + 16]
-			repid = data[i + 16: i + 24]
-			dlength = data[i + 24]
-			digest = data[i + 25: i + 25 + int(dlength)]
-			pre := new(Prepare)
-			pre.View = binary.BigEndian.Uint64(view)
-			pre.SequenceNumber = binary.BigEndian.Uint64(seq)
-			pre.ReplicaId = binary.BigEndian.Uint64(repid)
-			pre.BatchDigest = string(digest)
-			//更新cert
-			cert := instance.getCert(pre.View, pre.SequenceNumber)
-			for _, prep := range(cert.prepare){
-				if prep == pre{
-					flag = 1
-					break
-				}
-			}
-			if flag == 0{
-				cert.prepare = append(cert.prepare, pre)
-				instance.persistPSet()
-			}
-
-			//补充cert.commit
-			commit := &Commit{
-				View:           pre.View,
-				SequenceNumber: pre.SequenceNumber,
-				BatchDigest:    pre.BatchDigest,
-				ReplicaId:      pre.ReplicaId,
-			}
-			cert.commit = append(cert.commit, commit)
-
-
-			i = i + 25 + int(dlength)
-		}
-
-
-
-		instance.stopTimer()
-		instance.lastNewViewTimeout = instance.newViewTimeout
-		delete(instance.outstandingReqBatches, string(digest))
-		instance.executeOutstanding()
-		if binary.BigEndian.Uint64(seq) == instance.viewChangeSeqNo {
-			logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, binary.BigEndian.Uint64(seq))
-			instance.sendViewChange()
-		}
-	}
 }
