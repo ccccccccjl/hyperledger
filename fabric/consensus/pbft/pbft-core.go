@@ -185,6 +185,8 @@ type pbftCore struct {
 	ids []uint64//签名的对应节点
 	prepare2_num int//记录收到的prepare2消息数量
 	finish_num int//记录收到的finish消息数量
+	clientsRequests []*Request//记录收到的客户端请求
+	notConsensused int
 }
 
 type qidx struct {
@@ -328,6 +330,8 @@ func newPbftCore(id uint64, config *viper.Viper, consumer innerStack, etf events
 	instance.ids = []uint64{}
 	instance.prepare2_num = 0
 	instance.finish_num = 0
+	instance.clientsRequests = []*Request{}
+	instance.notConsensused = 0
 
 	return instance
 }
@@ -368,11 +372,11 @@ func (instance *pbftCore) ProcessEvent(e events.Event) events.Event {
 	case *Ack:
 		err = instance.recvAck(et)
 	case *Finish:
-		err = instance.recvFinish(et)
+		instance.recvFinish(et)
 	case *Commit:
 		err = instance.recvCommit(et)
 	case *Checkpoint:
-		return instance.recvCheckpoint(et)
+		//return instance.recvCheckpoint(et)
 	case *ViewChange:
 		return instance.recvViewChange(et)
 	case *NewView:
