@@ -704,6 +704,7 @@ func (instance *pbftCore) sendPrePrepare(reqBatch *RequestBatch, digest string) 
 	cert.prePrepare = preprep
 	cert.digest = digest
 	instance.persistQSet()
+	logger.Infof("replica %d is sending pre-prepare message", instance.id)
 	instance.innerBroadcast(&Message{Payload: &Message_PrePrepare{PrePrepare: preprep}})
 	//instance.maybeSendCommit(digest, instance.view, n)
 }
@@ -742,7 +743,8 @@ outer:
 func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 	logger.Debugf("Replica %d received pre-prepare from replica %d for view=%d/seqNo=%d",
 		instance.id, preprep.ReplicaId, preprep.View, preprep.SequenceNumber)
-
+	
+	logger.Infof("replica %d receives pre-prepare message")
 	if !instance.activeView {
 		logger.Debugf("Replica %d ignoring pre-prepare as we are in a view change", instance.id)
 		return nil
@@ -829,6 +831,7 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 		}
 		cert.sentPrepare = true
 		instance.persistQSet()
+		logger.Infof("replica %d is sending prepare message", instance.id)
 		//instance.recvPrepare(prep)
 		//return instance.innerBroadcast(&Message{Payload: &Message_Prepare{Prepare: prep}})
 		//发给主节点
@@ -846,6 +849,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		logger.Warningf("Replica %d received prepare from primary, ignoring", instance.id)
 		return nil
 	}
+	logger.Infof("replica %d receives prepare2 message", instance.id)
 	
 	//上个视图的prepare2消息
 	if prep.View < instance.view{
@@ -942,7 +946,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		logger.Warningf("Replica %d received prepare not from primary, ignoring", instance.id)
 		return nil
 	}
-	
+	logger.Infof("replica %d receives ask message", instance.id)
 	if ack.View < instance.view{
 		return nil
 	}
@@ -1235,11 +1239,10 @@ func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
 	
 	cert := instance.getCert(view, seq)
 	//给下一个主节点发送finish消息
-	instance.view++
 	instance.seqNo++
 	
 	finish := &Finish{
-		View:           instance.view - 1,
+		View:           instance.view,
 		SequenceNumber: instance.seqNo - 1,
 		BatchDigest:    cert.digest,
 		ReplicaId:      instance.id,
