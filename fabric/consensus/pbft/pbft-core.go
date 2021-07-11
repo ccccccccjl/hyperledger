@@ -877,6 +877,7 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 }
 
 func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
+	instance.stopTimer()
 	logger.Debugf("Replica %d received prepare from replica %d for view=%d/seqNo=%d",
 		instance.id, prep.ReplicaId, prep.View, prep.SequenceNumber)
 	
