@@ -254,7 +254,7 @@ func (instance *pbftCore) recvViewChange(vc *ViewChange) events.Event {
 	return nil
 }
 
-func (instance *pbftCore) ew(sendNewVi) events.Event {
+func (instance *pbftCore) sendNewView() events.Event {
 
 	if _, ok := instance.newViewStore[instance.view]; ok {
 		logger.Debugf("Replica %d already has new view in store for view %d, skipping", instance.id, instance.view)
