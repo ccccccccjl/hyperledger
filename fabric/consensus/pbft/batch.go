@@ -142,6 +142,19 @@ func (op *obcBatch) submitToLeader(req *Request) events.Event {
 	op.reqStore.storeOutstanding(req)
 	op.startTimerIfOutstandingRequests()
 	op.pbft.clientsRequests = append(op.pbft.clientsRequest, req)
+	
+	//对于主节点，如果没有正在共识，则判断是否出块
+	if op.pbft.primary(op.pbft.view) == op.pbft.id && op.pbft.activeView{
+		if op.pbft.isConsensus == false{
+			//有足够数量的交易则出块，否则等待一会儿再出块
+			if len(op.pbft.clientsRequests) - op.pbft.notConsensused >= op.batchSize{
+				logger.Infof("leader %d is packing", op.pbft.id)
+				return op.leaderProcReq()
+			}else{
+				op.startBatchTimer()
+			}
+		}
+	}
 	/*if op.pbft.primary(op.pbft.view) == op.pbft.id && op.pbft.activeView {
 		return op.leaderProcReq(req)
 	}*/
@@ -375,7 +388,7 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 	case batchTimerEvent:
 		logger.Infof("Replica %d batch timer expired", op.pbft.id)
 		if op.pbft.activeView && (len(op.batchStore) > 0) {
-			return op.sendBatch()
+			return op.leaderProcReq()
 		}
 	case *Commit:
 		// TODO, this is extremely hacky, but should go away when batch and core are merged
