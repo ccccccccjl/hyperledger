@@ -850,13 +850,12 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	logger.Debugf("Replica %d received prepare from replica %d for view=%d/seqNo=%d",
 		instance.id, prep.ReplicaId, prep.View, prep.SequenceNumber)
-
+	
 	if instance.primary(prep.View) == prep.ReplicaId {
 		logger.Warningf("Replica %d received prepare from primary, ignoring", instance.id)
 		return nil
 	}
 	logger.Infof("replica %d receives prepare2 message", instance.id)
-	
 	//上个视图的prepare2消息
 	if prep.View < instance.view{
 		return nil
@@ -869,30 +868,16 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	if instance.prepare2_num >= instance.f * 2{
 		return nil
 	}
-
-	/*if !instance.inWV(prep.View, prep.SequenceNumber) {
-		if prep.SequenceNumber != instance.h && !instance.skipInProgress {
-			logger.Warningf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
-		} else {
-			// This is perfectly normal
-			logger.Debugf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
-		}
-		return nil
-	}*/
-
+	
 	cert := instance.getCert(prep.View, prep.SequenceNumber)
 	instance.prepare2_num++
 	
-
 	for _, prevPrep := range cert.prepare {
 		if prevPrep.ReplicaId == prep.ReplicaId {
 			logger.Warningf("Ignoring duplicate prepare from %d", prep.ReplicaId)
 			return nil
 		}
 	}
-	//cert.prepare = append(cert.prepare, prep)
-	//instance.persistPSet()
-	
 	
 	//从prepare2消息中收集签名和公钥
 	pk2, _ := g2pubs.DeserializePublicKey(prep.PublicKey)
@@ -908,6 +893,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		if err != nil{
 			fmt.Println("generate key error")
 		}
+		
 		pk := g2pubs.PrivToPub(sk)
 		sig := g2pubs.Sign(prep.BatchDigest, sk)
 		instance.pks = append(instance.pks, pk)
@@ -916,12 +902,11 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		//将公钥转为[]byte
 		bpks := []byte{}
 		for key := range(instance.pks){
-			b := key..Serialize()
+			b := key.Serialize()
 			for i := 0; i < len(b); i++{
 				bpks := append(bpks, b[i])
 			}
 		}
-			
 		
 		//聚合签名
 		asig := g2pubs.AggregateSignatures(instance.sigs)
@@ -940,9 +925,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		instance.recvAck(ack)
 		return instance.innerBroadcast(&Message{Payload: &Message_Ack{Ack: ack}})	
 	}
-	
 	return nil
-	//return instance.maybeSendCommit(prep.BatchDigest, prep.View, prep.SequenceNumber)
 }
 
 
