@@ -82,6 +82,8 @@ type returnRequestBatchEvent *RequestBatch
 // nullRequestEvent provides "keep-alive" null requests
 type nullRequestEvent struct{}
 
+type packRequestsEvent struct {}
+
 
 
 // Unless otherwise noted, all methods consume the PBFT thread, and should therefore
@@ -1026,9 +1028,9 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 	instance.lastNewViewTimeout = instance.newViewTimeout
 	delete(instance.outstandingReqBatches, ack.BatchDigest)
 
-	instance.executeOutstanding2(ask.View, ack.SequenceNumber)
+	instance.executeOutstanding2(ack.View, ack.SequenceNumber)
 
-	if commit.SequenceNumber == instance.viewChangeSeqNo {
+	if ack.SequenceNumber == instance.viewChangeSeqNo {
 		logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, ack.SequenceNumber)
 		instance.sendViewChange()
 	}
@@ -1274,7 +1276,7 @@ func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
 			BatchDigest:    cert.digest,
 			ReplicaId:      instance.id,
 		}
-		instance.innerBroadcastToLeader(&Message{Payload: &Message_Finish{Finish: finish}})
+		instance.innerBroadcastToPrimary(&Message{Payload: &Message_Finish{Finish: finish}})
 	}
 }
 
@@ -1629,7 +1631,7 @@ func (instance *pbftCore) innerBroadcastToPrimary(msg *Message) error {
 
 	// testing byzantine fault.
 	if doByzantine {
-		logger.Wariningf("Byzantine peer, do not send message to leader");
+		logger.Warningf("Byzantine peer, do not send message to leader");
 	} else {
 		instance.consumer.unicast(msgRaw, instance.primary(instance.view))
 	}
