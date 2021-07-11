@@ -82,7 +82,7 @@ type returnRequestBatchEvent *RequestBatch
 // nullRequestEvent provides "keep-alive" null requests
 type nullRequestEvent struct{}
 
-type packRequestEvent struct{}
+
 
 // Unless otherwise noted, all methods consume the PBFT thread, and should therefore
 // not rely on PBFT accomplishing any work while that thread is being held
@@ -440,8 +440,7 @@ func (instance *pbftCore) ProcessEvent(e events.Event) events.Event {
 		logger.Debugf("Replica %d view change resend timer expired before view change quorum was reached, resending", instance.id)
 		instance.view-- // sending the view change increments this
 		return instance.sendViewChange()
-	case packRequestEvent:
-		instance.leaderProcRequest()	
+	
 	default:
 		logger.Warningf("Replica %d received an unknown message type %T", instance.id, et)
 	}
@@ -1661,6 +1660,5 @@ func (instance *pbftCore) stopTimer() {
 	instance.timerActive = false
 	instance.newViewTimer.Stop()
 }
-
 
 }
