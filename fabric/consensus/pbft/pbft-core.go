@@ -712,6 +712,7 @@ func (instance *pbftCore) sendPrePrepare(reqBatch *RequestBatch, digest string) 
 	cert.digest = digest
 	instance.persistQSet()
 	logger.Infof("replica %d is sending pre-prepare message", instance.id)
+	instance.prepare2_num++
 	instance.innerBroadcast(&Message{Payload: &Message_PrePrepare{PrePrepare: preprep}})
 	//instance.maybeSendCommit(digest, instance.view, n)
 }
@@ -1286,9 +1287,11 @@ func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
 	instance.sigs = []*g2pubs.Signature{}//存储prepare2消息的签名
 	instance.pks = []*g2pubs.PublicKey{}//存储各个节点的公钥
 	instance.ids = []uint64{}//签名的对应节点
-	instance.prepare2_num = 0//记录收到的prepare2消息数量
 	
 	//cert := instance.getCert(view, seq)
+	if instance.id == instance.primary(instance.view){
+		instance.finish_num++
+	}
 	
 	//非主节点发送finish
 	if instance.id != instance.primary(instance.view){
@@ -1313,6 +1316,7 @@ func (instance *pbftCore) recvFinish(finish *Finish) events.Event{
 	}
 	instance.finish_num++
 	logger.Infof("replica %d receives finish", instance.id)
+	
 	//开始打包新区块
 	if instance.finish_num == instance.N / 2{
 		instance.seqNo++
