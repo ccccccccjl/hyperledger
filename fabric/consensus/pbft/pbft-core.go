@@ -373,7 +373,7 @@ func (instance *pbftCore) ProcessEvent(e events.Event) events.Event {
 	case *Ack:
 		err = instance.recvAck(et)
 	case *Finish:
-		instance.recvFinish(et)
+		return instance.recvFinish(et)
 	case *Commit:
 		err = instance.recvCommit(et)
 	case *Checkpoint:
@@ -811,7 +811,7 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 		instance.persistRequestBatch(digest)
 	}
 
-	instance.softStartTimer(instance.requestTimeout, fmt.Sprintf("new pre-prepare for request batch %s", preprep.BatchDigest))
+	//instance.softStartTimer(instance.requestTimeout, fmt.Sprintf("new pre-prepare for request batch %s", preprep.BatchDigest))
 	instance.nullRequestTimer.Stop()
 
 	if instance.primary(instance.view) != instance.id && instance.prePrepared(preprep.BatchDigest, preprep.View, preprep.SequenceNumber) && !cert.sentPrepare {
