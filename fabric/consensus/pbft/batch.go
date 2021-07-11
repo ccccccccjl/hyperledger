@@ -310,7 +310,7 @@ func (op *obcBatch) processMessage(ocMsg *pb.Message, senderHandle *pb.PeerID) e
 		op.logAddTxFromRequest(req)
 		op.reqStore.storeOutstanding(req)
 		
-		op.startTimer(op.pbft.requestTimeout, "waiting for pre-prepare")
+		op.pbft.startTimer(op.pbft.requestTimeout, "waiting for pre-prepare")
 		//op.startTimerIfOutstandingRequests()
 		return nil
 	} else if pbftMsg := batchMsg.GetPbftMessage(); pbftMsg != nil {
