@@ -773,7 +773,9 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 		logger.Info("Replica %d received pre-prepare for %d, which should be from the last primary", instance.id, preprep.SequenceNumber)
 		instance.sendViewChange()
 		return nil
-	}if preprep.SequenceNumber < instance.seqNo{
+	}
+	
+	if preprep.SequenceNumber < instance.seqNo{
 		logger.Info("Replica %d received pre-prepare for %d, which should be from the last primary", instance.id, preprep.SequenceNumber)
 		instance.sendViewChange()
 		return nil
@@ -897,7 +899,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	sig1, _ := g2pubs.DeserializeSignature(prep.Signature)
 	instance.pks = append(instance.pks, pk2)
 	instance.sigs = append(instance.sigs, sig2)
-	instance.ids := append(instance.ids, prep.ReplicaId)
+	instance.ids = append(instance.ids, prep.ReplicaId)
 	
 	//主节点收集到足够的prepare消息后聚合签名
 	if instance.prepare2_num >= instance.f * 2 {
@@ -939,6 +941,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		return instance.innerBroadcast(&Message{Payload: &Message_Ack{Ack: ack}})	
 	}
 	
+	return nil
 	//return instance.maybeSendCommit(prep.BatchDigest, prep.View, prep.SequenceNumber)
 }
 
@@ -987,7 +990,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 	
 	//验证成功
 	//补充cert.prepare和cert.commit
-	for rid := rane(ack.Replicas){
+	for rid := range(ack.Replicas){
 		prep := &Prepare{
 			View:           ack.View,
 			SequenceNumber: ack.SequenceNumber,
@@ -1674,4 +1677,4 @@ func (instance *pbftCore) stopTimer() {
 	instance.newViewTimer.Stop()
 }
 
-}
+
