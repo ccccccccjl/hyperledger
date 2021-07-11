@@ -952,9 +952,18 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 			ReplicaId:      instance.id,
 		}
 		logger.Infof("replica %d sending ack", instance.id)
-		//自己也收到ack
-		instance.recvAck(ack)
 		return instance.innerBroadcast(&Message{Payload: &Message_Ack{Ack: ack}})	
+		
+		//上链
+		instance.lastNewViewTimeout = instance.newViewTimeout
+		delete(instance.outstandingReqBatches, ack.BatchDigest)
+
+		instance.executeOutstanding2(ack.View, ack.SequenceNumber)
+
+		if ack.SequenceNumber == instance.viewChangeSeqNo {
+			logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, ack.SequenceNumber)
+			instance.sendViewChange()
+		}
 	}
 	return nil
 }
@@ -1005,41 +1014,41 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		}
 		logger.Infof("pk:%v", bb1)
 		pk, _ := g2pubs.DeserializePublicKey(bb1)
-		bd := []byte(ack.BatchDigest)//将BatchDigest转为[]byte
-		result := g2pubs.Verify(bd, pk, asig)
-		if result == false{
-			logger.Warningf("Verify failed")
-			return nil
-		}
+		instance.pks = append(instance.pks, pk)
 	}
+	bd := []byte(ack.BatchDigest)//将BatchDigest转为[]byte
+	r := asig.VerifyAggregateCommon(instance.pks, bd)
+	
 	
 	//验证成功
 	//补充cert.prepare和cert.commit
-	for rid := range(ack.Replicas){
-		prep := &Prepare{
-			View:           ack.View,
-			SequenceNumber: ack.SequenceNumber,
-			BatchDigest:    ack.BatchDigest,
-			ReplicaId:      uint64(rid),
+	if r == true{
+		for rid := range(ack.Replicas){
+			prep := &Prepare{
+				View:           ack.View,
+				SequenceNumber: ack.SequenceNumber,
+				BatchDigest:    ack.BatchDigest,
+				ReplicaId:      uint64(rid),
+			}
+			cert.prepare = append(cert.prepare, prep)
+			commit := &Commit{
+				View:           ack.View,
+				SequenceNumber: ack.SequenceNumber,
+				BatchDigest:    ack.BatchDigest,
+				ReplicaId:      uint64(rid),
+			}
+			cert.commit = append(cert.commit, commit)
 		}
-		cert.prepare = append(cert.prepare, prep)
-		commit := &Commit{
-			View:           ack.View,
-			SequenceNumber: ack.SequenceNumber,
-			BatchDigest:    ack.BatchDigest,
-			ReplicaId:      uint64(rid),
+		//上链
+		instance.lastNewViewTimeout = instance.newViewTimeout
+		delete(instance.outstandingReqBatches, ack.BatchDigest)
+
+		instance.executeOutstanding2(ack.View, ack.SequenceNumber)
+
+		if ack.SequenceNumber == instance.viewChangeSeqNo {
+			logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, ack.SequenceNumber)
+			instance.sendViewChange()
 		}
-		cert.commit = append(cert.commit, commit)
-	}
-	//上链
-	instance.lastNewViewTimeout = instance.newViewTimeout
-	delete(instance.outstandingReqBatches, ack.BatchDigest)
-
-	instance.executeOutstanding2(ack.View, ack.SequenceNumber)
-
-	if ack.SequenceNumber == instance.viewChangeSeqNo {
-		logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, ack.SequenceNumber)
-		instance.sendViewChange()
 	}
 	return nil
 }
