@@ -18,7 +18,7 @@ package pbft
 
 import (
 	"encoding/base64"
-	"encoding/binary"
+	//"encoding/binary"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -33,7 +33,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
 	"github.com/phoreproject/bls/g2pubs"
-	crand "crypto/rand"
+	//crand "crypto/rand"
 	
 )
 
@@ -366,8 +366,8 @@ func (instance *pbftCore) ProcessEvent(e events.Event) events.Event {
 		err = instance.recvRequestBatch(et)
 	case *PrePrepare:
 		err = instance.recvPrePrepare(et)
-	case *Prepare:
-		err = instance.recvPrepare(et)
+	//case *Prepare:
+	//	err = instance.recvPrepare(et)
 	case *Prepare2:
 		err = instance.recvPrepare2(et)
 	case *Ack:
