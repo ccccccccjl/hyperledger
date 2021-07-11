@@ -926,15 +926,16 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		sig := g2pubs.Sign(bd, sk)
 		instance.pks = append(instance.pks, pk)
 		instance.sigs = append(instance.sigs, sig)
+		instance.ids = append(instance.ids, instance.id)
 		
 		//将公钥转为[]byte
 		bpks := []byte{}
 		for _, key := range(instance.pks){
 			b := key.Serialize()
-			logger.Infof("pk:%s", b)
 			for i := 0; i < len(b); i++{
 				bpks = append(bpks, b[i])
 			}
+			logger.Infof("pk:%v", b)
 		}
 		
 		
@@ -1009,8 +1010,8 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 	for i := 0; i < 48; i++{
 		bbasig[i] = basig[i]
 	}
-	
 	asig, _ := g2pubs.DeserializeSignature(bbasig)
+	
 	bpks := ack.PublicKeys
 	for i := 0; i < len(bpks); i = i + 96{
 		b1 := bpks[i: i + 96]
@@ -1018,6 +1019,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		for j := 0; j < 96; j++{
 			bb1[j] = b1[j]
 		}
+		logger.Infof("pk:%v", bb1)
 		pk, _ := g2pubs.DeserializePublicKey(bb1)
 		instance.pks = append(instance.pks, pk)
 	}
