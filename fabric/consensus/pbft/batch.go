@@ -239,7 +239,7 @@ func (op *obcBatch) leaderProcReq() events.Event {
 	if len(op.pbft.clientsRequests) - op.pbft.notConsensused >= op.batchSize{
 		for i := op.pbft.notConsensused; i < op.pbft.notConsensused + op.batchSize; i++{
 			req := op.pbft.clientsRequests[i]
-			digest := hash(req)
+			//digest := hash(req)
 			op.batchStore = append(op.batchStore, req)
 			op.reqStore.storePending(req)
 		}
@@ -247,7 +247,7 @@ func (op *obcBatch) leaderProcReq() events.Event {
 	}else{
 		for i := op.pbft.notConsensused; i < len(op.pbft.clientsRequests); i++{
 			req := op.pbft.clientsRequests[i]
-			digest := hash(req)
+			//digest := hash(req)
 			op.batchStore = append(op.batchStore, req)
 			op.reqStore.storePending(req)
 		}
