@@ -111,9 +111,9 @@ func (*Message_ViewChange) isMessage_Payload()         {}
 func (*Message_NewView) isMessage_Payload()            {}
 func (*Message_FetchRequestBatch) isMessage_Payload()  {}
 func (*Message_ReturnRequestBatch) isMessage_Payload() {}
-func (*Message_Prepare2) isMessage_Payload()            {}
-func (*Message_Ack) isMessage_Payload()            {}
-func (*Message_Finish) isMessage_Payload()            {}
+func (*Message_Prepare2) isMessage_Payload()           {}
+func (*Message_Ack) isMessage_Payload()                {}
+func (*Message_Finish) isMessage_Payload()             {}
 
 func (m *Message) GetPayload() isMessage_Payload {
 	if m != nil {
