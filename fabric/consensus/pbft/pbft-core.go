@@ -753,7 +753,7 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 	
 	logger.Infof("replica %d receives pre-prepare message", instance.id)
 	if !instance.activeView {
-		logger.Debugf("Replica %d ignoring pre-prepare as we are in a view change", instance.id)
+		logger.Warningf("Replica %d ignoring pre-prepare as we are in a view change", instance.id)
 		return nil
 	}
 
@@ -870,17 +870,21 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		logger.Warningf("Replica %d received prepare from primary, ignoring", instance.id)
 		return nil
 	}
-	logger.Infof("replica %d receives prepare2 message", instance.id)
+	
 	//上个视图的prepare2消息
 	if prep.View < instance.view{
+		logger.Infof("replica %d receives prepare2 message from last view,ignore", instance.id)
 		return nil
 	}
 	if prep.SequenceNumber < instance.seqNo{
+		logger.Infof("replica %d receives prepare2 message which belong to last block,ignore", instance.id)
 		return nil
 	}
+	logger.Infof("replica %d receives prepare2 message, have received %d, want %d", instance.id, instance.prepare2_num, instance.f * 2)
 	
 	//已发送聚合签名
-	if instance.prepare2_num >= instance.f * 2{
+	if instance.prepare2_num > instance.f * 2{
+		logger.Infof("replica %d has already received enough prepare2 message,ignore", instance.id)
 		return nil
 	}
 	
@@ -979,9 +983,11 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 	}
 	//logger.Infof("replica %d receives ask message", instance.id)
 	if ack.View < instance.view{
+		logger.Infof("replica %d receives ack message from last view, ignore", instance.id)
 		return nil
 	}
 	if ack.SequenceNumber < instance.seqNo{
+		logger.Infof("replica %d receives ack message which belong to last block, ignore", instance.id)
 		return nil
 	}
 	/*if !instance.inWV(prep.View, prep.SequenceNumber) {
@@ -1012,43 +1018,44 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		for j := 0; j < 96; j++{
 			bb1[j] = b1[j]
 		}
-		logger.Infof("pk:%v", bb1)
 		pk, _ := g2pubs.DeserializePublicKey(bb1)
 		instance.pks = append(instance.pks, pk)
 	}
 	bd := []byte(ack.BatchDigest)//将BatchDigest转为[]byte
 	r := asig.VerifyAggregateCommon(instance.pks, bd)
+	if r == false{
+		logger.Warningf("verify failed")
+		return nil
+	}
 	
 	
 	//验证成功
 	//补充cert.prepare和cert.commit
-	if r == true{
-		for rid := range(ack.Replicas){
-			prep := &Prepare{
-				View:           ack.View,
-				SequenceNumber: ack.SequenceNumber,
-				BatchDigest:    ack.BatchDigest,
-				ReplicaId:      uint64(rid),
-			}
-			cert.prepare = append(cert.prepare, prep)
-			commit := &Commit{
-				View:           ack.View,
-				SequenceNumber: ack.SequenceNumber,
-				BatchDigest:    ack.BatchDigest,
-				ReplicaId:      uint64(rid),
-			}
-			cert.commit = append(cert.commit, commit)
+	for rid := range(ack.Replicas){
+		prep := &Prepare{
+			View:           ack.View,
+			SequenceNumber: ack.SequenceNumber,
+			BatchDigest:    ack.BatchDigest,
+			ReplicaId:      uint64(rid),
 		}
-		//上链
-		instance.lastNewViewTimeout = instance.newViewTimeout
-		delete(instance.outstandingReqBatches, ack.BatchDigest)
-
-		instance.executeOutstanding2(ack.View, ack.SequenceNumber)
-
-		if ack.SequenceNumber == instance.viewChangeSeqNo {
-			logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, ack.SequenceNumber)
-			instance.sendViewChange()
+		cert.prepare = append(cert.prepare, prep)
+		commit := &Commit{
+			View:           ack.View,
+			SequenceNumber: ack.SequenceNumber,
+			BatchDigest:    ack.BatchDigest,
+			ReplicaId:      uint64(rid),
 		}
+		cert.commit = append(cert.commit, commit)
+	}
+	//上链
+	instance.lastNewViewTimeout = instance.newViewTimeout
+	delete(instance.outstandingReqBatches, ack.BatchDigest)
+
+	instance.executeOutstanding2(ack.View, ack.SequenceNumber)
+
+	if ack.SequenceNumber == instance.viewChangeSeqNo {
+		logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, ack.SequenceNumber)
+		instance.sendViewChange()
 	}
 	return nil
 }
