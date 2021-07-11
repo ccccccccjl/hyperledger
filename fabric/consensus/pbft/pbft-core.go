@@ -187,6 +187,7 @@ type pbftCore struct {
 	finish_num int//记录收到的finish消息数量
 	clientsRequests []*Request//记录收到的客户端请求
 	notConsensused int
+	isConsensus bool//是否正在共识
 }
 
 type qidx struct {
@@ -439,6 +440,8 @@ func (instance *pbftCore) ProcessEvent(e events.Event) events.Event {
 		logger.Debugf("Replica %d view change resend timer expired before view change quorum was reached, resending", instance.id)
 		instance.view-- // sending the view change increments this
 		return instance.sendViewChange()
+	case packRequestEvent:
+		instance.leaderProcRequest()	
 	default:
 		logger.Warningf("Replica %d received an unknown message type %T", instance.id, et)
 	}
@@ -669,6 +672,7 @@ func (instance *pbftCore) recvRequestBatch(reqBatch *RequestBatch) error {
 
 func (instance *pbftCore) sendPrePrepare(reqBatch *RequestBatch, digest string) {
 	logger.Debugf("Replica %d is primary, issuing pre-prepare for request batch %s", instance.id, digest)
+	
 
 	n := instance.seqNo + 1
 	for _, cert := range instance.certStore { // check for other PRE-PREPARE for same digest, but different seqNo
@@ -693,6 +697,7 @@ func (instance *pbftCore) sendPrePrepare(reqBatch *RequestBatch, digest string) 
 
 	logger.Debugf("Primary %d broadcasting pre-prepare for view=%d/seqNo=%d and digest %s", instance.id, instance.view, n, digest)
 	//instance.seqNo = n
+	instance.isConsensus = true
 	preprep := &PrePrepare{
 		View:           instance.view,
 		SequenceNumber: n,
@@ -1260,7 +1265,8 @@ func (instance *pbftCore) recvFinish(finish *Finish) events.Event{
 	instance.finish_num++
 	
 	//开始打包交易入块
-	if instance.finish_num == instance.N / 2{
+	if instance.finish_num >= instance.N / 2{
+		instance.isConsensus = false
 		return packRequestsEvent{}
 	}
 	return nil
