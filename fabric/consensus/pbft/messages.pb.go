@@ -891,10 +891,9 @@ type Ack struct {
 	PublicKeys      []byte `protobuf:"bytes,5,opt,name=public_keys,proto3" json:"public_keys,omitempty"`
 	Replicas      []uint64 `protobuf:"varint,6,opt,name=replicas,proto3" json:"replicas,omitempty"`
 	ReplicaId      uint64 `protobuf:"varint,7,opt,name=replica_id,json=replicaId" json:"replica_id,omitempty"`
-	
 }
 
-func (m *Ack) Reset()                    { *m = Ack }
+func (m *Ack) Reset()                    { *m = Ack{} }
 func (m *Ack) String() string            { return proto.CompactTextString(m) }
 func (*Ack) ProtoMessage()               {}
 func (*Ack) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
@@ -907,7 +906,7 @@ type Finish struct {
 	
 }
 
-func (m *Finish) Reset()                    { *m = Finish }
+func (m *Finish) Reset()                    { *m = Finish{} }
 func (m *Finish) String() string            { return proto.CompactTextString(m) }
 func (*Finish) ProtoMessage()               {}
 func (*Finish) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
