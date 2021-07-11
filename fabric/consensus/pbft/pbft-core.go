@@ -927,10 +927,12 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		bpks := []byte{}
 		for _, key := range(instance.pks){
 			b := key.Serialize()
+			logger.Infof("pk:%s", b)
 			for i := 0; i < len(b); i++{
 				bpks = append(bpks, b[i])
 			}
 		}
+		
 		
 		//聚合签名
 		asig := g2pubs.AggregateSignatures(instance.sigs)
@@ -1001,6 +1003,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		for j := 0; j < 96; j++{
 			bb1[j] = b1[j]
 		}
+		logger.Infof("pk:%v", bb1)
 		pk, _ := g2pubs.DeserializePublicKey(bb1)
 		bd := []byte(ack.BatchDigest)//将BatchDigest转为[]byte
 		result := g2pubs.Verify(bd, pk, asig)
