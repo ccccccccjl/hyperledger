@@ -933,6 +933,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 			Replicas:       instance.ids,
 			ReplicaId:      instance.id,
 		}
+		logger.Infof("replica %d sending ack", instance.id)
 		//自己也收到ack
 		instance.recvAck(ack)
 		return instance.innerBroadcast(&Message{Payload: &Message_Ack{Ack: ack}})	
@@ -943,7 +944,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 
 
 func (instance *pbftCore) recvAck(ack *Ack) error {
-	logger.Debugf("Replica %d received prepare from replica %d for view=%d/seqNo=%d",
+	logger.Infof("Replica %d received prepare from replica %d for view=%d/seqNo=%d",
 		instance.id, ack.ReplicaId, ack.View, ack.SequenceNumber)
 
 	if instance.primary(ack.View) != ack.ReplicaId {
@@ -1242,29 +1243,41 @@ func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
 	instance.prepare2_num = 0//记录收到的prepare2消息数量
 	
 	cert := instance.getCert(view, seq)
-	//给下一个主节点发送finish消息
-	instance.seqNo++
 	
-	finish := &Finish{
-		View:           instance.view,
-		SequenceNumber: instance.seqNo - 1,
-		BatchDigest:    cert.digest,
-		ReplicaId:      instance.id,
+	//非主节点发送finish
+	if instance.id != instance.primary(instance.view){
+		logger.Infof("repplica %d sending finish", instance.id)
+		instance.seqNo++
+		
+		finish := &Finish{
+			View:           instance.view,
+			SequenceNumber: instance.seqNo - 1,
+			BatchDigest:    cert.digest,
+			ReplicaId:      instance.id,
+		}
+		instance.innerBroadcastToLeader(&Message{Payload: &Message_Finish{Finish: finish}})
 	}
-	instance.innerBroadcastToLeader(&Message{Payload: &Message_Finish{Finish: finish}})
 }
 
 
 
 
 func (instance *pbftCore) recvFinish(finish *Finish) events.Event{
-	if finish.View != instance.view - 1 || finish.SequenceNumber != instance.seqNo - 1{
+	if finish.View != instance.view || finish.SequenceNumber != instance.seqNo{
 		return nil
 	}
 	instance.finish_num++
-	
-	//开始打包交易入块
-	if instance.finish_num >= instance.N / 2{
+	logger.Infof("replica %d receives finish", instance.id)
+	//开始打包新区块
+	if instance.finish_num == instance.N / 2{
+		instance.seqNo++
+		logger.Infof("replica %d receives enough finish", instance.id)
+		
+		cert := instance.getCert(finish.View, finish.SequenceNumber)
+		instance.notConsensused += len(cert.prePrepare.RequestBatch.Batch)
+		
+		instance.prepare2_num = 0
+		instance.finish_num = 0
 		instance.isConsensus = false
 		return packRequestsEvent{}
 	}
