@@ -751,7 +751,7 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 	logger.Debugf("Replica %d received pre-prepare from replica %d for view=%d/seqNo=%d",
 		instance.id, preprep.ReplicaId, preprep.View, preprep.SequenceNumber)
 	
-	logger.Infof("replica %d receives pre-prepare message")
+	logger.Infof("replica %d receives pre-prepare message", instance.id)
 	if !instance.activeView {
 		logger.Debugf("Replica %d ignoring pre-prepare as we are in a view change", instance.id)
 		return nil
@@ -966,7 +966,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		logger.Warningf("Replica %d received prepare not from primary, ignoring", instance.id)
 		return nil
 	}
-	logger.Infof("replica %d receives ask message", instance.id)
+	//logger.Infof("replica %d receives ask message", instance.id)
 	if ack.View < instance.view{
 		return nil
 	}
@@ -997,7 +997,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 	bpks := ack.PublicKeys
 	for i := 0; i < len(bpks); i = i + 96{
 		b1 := bpks[i: i + 96]
-		bb1 := [96]byte{}//将b1转为[48]byte
+		bb1 := [96]byte{}//将b1转为[96]byte
 		for j := 0; j < 96; j++{
 			bb1[j] = b1[j]
 		}
