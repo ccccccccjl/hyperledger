@@ -722,7 +722,7 @@ func (instance *pbftCore) sendPrePrepare(reqBatch *RequestBatch, digest string) 
 	}
 
 	pk := g2pubs.PrivToPub(sk)
-	bd := []byte(prep.BatchDigest)
+	bd := []byte(preprep.BatchDigest)
 	sig := g2pubs.Sign(bd, sk)
 	instance.pks = append(instance.pks, pk)
 	instance.sigs = append(instance.sigs, sig)
