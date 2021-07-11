@@ -996,7 +996,8 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 			bb1[j] = b1[j]
 		}
 		pk, _ := g2pubs.DeserializePublicKey(bb1)
-		result := g2pubs.Verify(ack.BatchDigest, pk, asig)
+		bd := []byte(ack.BatchDigest)//将BatchDigest转为[]byte
+		result := g2pubs.Verify(bd, pk, asig)
 		if result == false{
 			logger.Warningf("Verify failed")
 			return nil
@@ -1010,25 +1011,25 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 			View:           ack.View,
 			SequenceNumber: ack.SequenceNumber,
 			BatchDigest:    ack.BatchDigest,
-			ReplicaId:      rid,
+			ReplicaId:      uint64(rid),
 		}
 		cert.prepare = append(cert.prepare, prep)
 		commit := &Commit{
 			View:           ack.View,
 			SequenceNumber: ack.SequenceNumber,
 			BatchDigest:    ack.BatchDigest,
-			ReplicaId:      rid,
+			ReplicaId:      uint64(rid),
 		}
-		cert.commit = append(cert.commit. commit)
+		cert.commit = append(cert.commit, commit)
 	}
 	//上链
 	instance.lastNewViewTimeout = instance.newViewTimeout
-	delete(instance.outstandingReqBatches, commit.BatchDigest)
+	delete(instance.outstandingReqBatches, ack.BatchDigest)
 
-	instance.executeOutstanding2(ask.View, ask.SequenceNumber)
+	instance.executeOutstanding2(ask.View, ack.SequenceNumber)
 
 	if commit.SequenceNumber == instance.viewChangeSeqNo {
-		logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, commit.SequenceNumber)
+		logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, ack.SequenceNumber)
 		instance.sendViewChange()
 	}
 	return nil
@@ -1157,7 +1158,7 @@ func (instance *pbftCore) executeOutstanding2(view uint64, seq uint64) {
 	// null request
 	if digest == "" {
 		logger.Infof("Replica %d executing/committing null request for view=%d/seqNo=%d",
-			instance.id, idx.v, idx.n)
+			instance.id, view, seq)
 		instance.execDoneSync(view, seq)
 	} else {
 		logger.Infof("Replica %d executing/committing request batch for view=%d/seqNo=%d, digest %s, it have %d requests", 
@@ -1220,7 +1221,7 @@ func (instance *pbftCore) executeOne(idx msgID) bool {
 	if digest == "" {
 		logger.Infof("Replica %d executing/committing null request for view=%d/seqNo=%d",
 			instance.id, idx.v, idx.n)
-		instance.execDoneSync()
+		instance.execDoneSync(idx.v, idx.n)
 	} else {
 		logger.Infof("Replica %d executing/committing request batch for view=%d/seqNo=%d and digest %s",
 			instance.id, idx.v, idx.n, digest)
