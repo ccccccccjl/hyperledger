@@ -449,6 +449,10 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 		op.reqStore = newRequestStore()
 		return op.pbft.ProcessEvent(event)
 	case packRequestsEvent:
+		//没有需要共识的交易
+		if op.pbft.notConsensused == len(op.pbft.clientsRequests){
+			return nil
+		}
 		return op.leaderProcReq()
 	default:
 		return op.pbft.ProcessEvent(event)
