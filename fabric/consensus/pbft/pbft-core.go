@@ -924,7 +924,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		for _, key := range(instance.pks){
 			b := key.Serialize()
 			for i := 0; i < len(b); i++{
-				bpks := append(bpks, b[i])
+				bpks = append(bpks, b[i])
 			}
 		}
 		
@@ -1263,7 +1263,7 @@ func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
 	instance.ids = []uint64{}//签名的对应节点
 	instance.prepare2_num = 0//记录收到的prepare2消息数量
 	
-	cert := instance.getCert(view, seq)
+	//cert := instance.getCert(view, seq)
 	
 	//非主节点发送finish
 	if instance.id != instance.primary(instance.view){
