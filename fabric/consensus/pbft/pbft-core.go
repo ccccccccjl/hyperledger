@@ -790,6 +790,8 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 		instance.sendViewChange()
 		return nil
 	}
+	
+	instance.stopTimer()
 
 	cert := instance.getCert(preprep.View, preprep.SequenceNumber)
 	if cert.digest != "" && cert.digest != preprep.BatchDigest {
@@ -815,7 +817,7 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 	}
 
 	//instance.softStartTimer(instance.requestTimeout, fmt.Sprintf("new pre-prepare for request batch %s", preprep.BatchDigest))
-	instance.nullRequestTimer.Stop()
+	//instance.nullRequestTimer.Stop()
 
 	if instance.primary(instance.view) != instance.id && instance.prePrepared(preprep.BatchDigest, preprep.View, preprep.SequenceNumber) && !cert.sentPrepare {
 		logger.Debugf("Backup %d broadcasting prepare for view=%d/seqNo=%d", instance.id, preprep.View, preprep.SequenceNumber)
@@ -850,6 +852,7 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 		cert.sentPrepare = true
 		instance.persistQSet()
 		logger.Infof("replica %d is sending prepare message", instance.id)
+		instance.startTimer(instance.requestTimeout, "waiting for ack")
 		//instance.recvPrepare(prep)
 		//return instance.innerBroadcast(&Message{Payload: &Message_Prepare{Prepare: prep}})
 		//发给主节点
@@ -979,7 +982,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		}
 		return nil
 	}*/
-
+	instance.stopTimer()
 	cert := instance.getCert(ack.View, ack.SequenceNumber)
 	
 	
