@@ -824,7 +824,7 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 		}
 		pk := g2pubs.PrivToPub(sk)
 		bd := []byte(preprep.BatchDigest)//将batchDigest转为[]byte
-		sig := g2pubs.Sign(preprep.BatchDigest, sk)
+		sig := g2pubs.Sign(bd, sk)
 		bpk := pk.Serialize()
 		bsig := sig.Serialize()
 		bbpk := []byte{}//将bpk转为[]byte
@@ -919,7 +919,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		
 		//将公钥转为[]byte
 		bpks := []byte{}
-		for key := range(instance.pks){
+		for _, key := range(instance.pks){
 			b := key.Serialize()
 			for i := 0; i < len(b); i++{
 				bpks := append(bpks, b[i])
@@ -929,11 +929,16 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		//聚合签名
 		asig := g2pubs.AggregateSignatures(instance.sigs)
 		basig := asig.Serialize()
+		bbasig := []byte{}//将basig转为[]byte
+		for i := 0; i < len(basig); i++{
+			bbasig = append(bbasig, basig[i])
+		}
+		
 		ack := &Ack{
-			View:           view, 
-			SequenceNumber: n,
-			BatchDigest:    digest,
-			Asig:           basig,
+			View:           prep.View, 
+			SequenceNumber: prep.SequenceNumber,
+			BatchDigest:    prep.BatchDigest,
+			Asig:           bbasig,
 			PublicKeys:     bpks,
 			Replicas:       instance.ids,
 			ReplicaId:      instance.id,
@@ -977,11 +982,20 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 	
 	//验证聚合签名
 	basig := ack.Asig
-	asig := g2pubs.DeserializeSignature(basig)
+	bbasig := [48]byte{}//将basig转为[48]byte
+	for i := 0; i < 48; i++{
+		bbasig[i] = basig[i]
+	}
+	
+	asig, _ := g2pubs.DeserializeSignature(bbasig)
 	bpks := ack.PublicKeys
 	for i := 0; i < len(bpks); i = i + 96{
 		b1 := bpks[i: i + 96]
-		pk := g2pubs.DeserializeSignature(b1)
+		bb1 := [96]byte{}//将b1转为[48]byte
+		for j := 0; j < 96; j++{
+			bb1[j] = b1[j]
+		}
+		pk, _ := g2pubs.DeserializePublicKey(bb1)
 		result := g2pubs.Verify(ack.BatchDigest, pk, asig)
 		if result == false{
 			logger.Warningf("Verify failed")
