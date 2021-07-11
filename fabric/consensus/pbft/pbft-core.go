@@ -714,6 +714,19 @@ func (instance *pbftCore) sendPrePrepare(reqBatch *RequestBatch, digest string) 
 	logger.Infof("replica %d is sending pre-prepare message", instance.id)
 	instance.prepare2_num++
 	instance.innerBroadcast(&Message{Payload: &Message_PrePrepare{PrePrepare: preprep}})
+	
+	//主节点自己也要签名
+	sk, err := g2pubs.RandKey(crand.Reader)
+	if err != nil{
+		fmt.Println("generate key error")
+	}
+
+	pk := g2pubs.PrivToPub(sk)
+	bd := []byte(prep.BatchDigest)
+	sig := g2pubs.Sign(bd, sk)
+	instance.pks = append(instance.pks, pk)
+	instance.sigs = append(instance.sigs, sig)
+	instance.ids = append(instance.ids, instance.id)
 	//instance.maybeSendCommit(digest, instance.view, n)
 }
 
@@ -916,20 +929,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	instance.ids = append(instance.ids, prep.ReplicaId)
 	
 	//主节点收集到足够的prepare消息后聚合签名
-	if instance.prepare2_num >= instance.f * 2 {
-		//主节点自己也要签名
-		sk, err := g2pubs.RandKey(crand.Reader)
-		if err != nil{
-			fmt.Println("generate key error")
-		}
-		
-		pk := g2pubs.PrivToPub(sk)
-		bd := []byte(prep.BatchDigest)
-		sig := g2pubs.Sign(bd, sk)
-		instance.pks = append(instance.pks, pk)
-		instance.sigs = append(instance.sigs, sig)
-		instance.ids = append(instance.ids, instance.id)
-		
+	if instance.prepare2_num == instance.f * 2 {
 		//将公钥转为[]byte
 		bpks := []byte{}
 		for _, key := range(instance.pks){
