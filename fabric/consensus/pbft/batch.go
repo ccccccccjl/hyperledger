@@ -147,6 +147,7 @@ func (op *obcBatch) submitToLeader(req *Request) events.Event {
 	
 	//对于主节点，如果没有正在共识，则判断是否出块
 	if op.pbft.primary(op.pbft.view) == op.pbft.id && op.pbft.activeView{
+		logger.Infof("isConsensus:%v", op.pbft.isConsensus)
 		if op.pbft.isConsensus == false{
 			//有足够数量的交易则出块，否则等待一会儿再出块
 			if len(op.pbft.clientsRequests) - op.pbft.notConsensused >= op.batchSize{
