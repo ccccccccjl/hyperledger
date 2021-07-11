@@ -33,7 +33,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
 	"github.com/phoreproject/bls/g2pubs"
-	//crand "crypto/rand"
+	crand "crypto/rand"
 	
 )
 
@@ -414,7 +414,7 @@ func (instance *pbftCore) ProcessEvent(e events.Event) events.Event {
 		instance.Checkpoint(update.seqNo, update.id)
 		instance.executeOutstanding()
 	case execDoneEvent:
-		instance.execDoneSync()
+		instance.execDoneSync(instance.view, instance.seqNo)
 		if instance.skipInProgress {
 			instance.retryStateTransfer(nil)
 		}
@@ -818,22 +818,31 @@ func (instance *pbftCore) recvPrePrepare(preprep *PrePrepare) error {
 		logger.Debugf("Backup %d broadcasting prepare for view=%d/seqNo=%d", instance.id, preprep.View, preprep.SequenceNumber)
 		//======================================================
 		//签名
-		sk, err := g2pubs.RandKey(rand.Reader)
+		sk, err := g2pubs.RandKey(crand.Reader)
 		if err != nil{
 			fmt.Println("generate key error")
 		}
 		pk := g2pubs.PrivToPub(sk)
+		bd := []byte(preprep.BatchDigest)//将batchDigest转为[]byte
 		sig := g2pubs.Sign(preprep.BatchDigest, sk)
 		bpk := pk.Serialize()
 		bsig := sig.Serialize()
+		bbpk := []byte{}//将bpk转为[]byte
+		for i := 0; i < len(bpk); i++{
+			bbpk = append(bbpk, bpk[i])
+		}
+		bbsig := []byte{}//将bsig转为[]byte
+		for i := 0; i < len(bsig); i++{
+			bbsig = append(bbsig, bsig[i])
+		}
 	
 		prep := &Prepare2{
 			View:           preprep.View,
 			SequenceNumber: preprep.SequenceNumber,
 			BatchDigest:    preprep.BatchDigest,
 			ReplicaId:      instance.id,
-			PublicKey:      bpk,
-			Signature:      bsig,
+			PublicKey:      bbpk,
+			Signature:      bbsig,
 		}
 		cert.sentPrepare = true
 		instance.persistQSet()
@@ -880,22 +889,31 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	}
 	
 	//从prepare2消息中收集签名和公钥
-	pk2, _ := g2pubs.DeserializePublicKey(prep.PublicKey)
-	sig1, _ := g2pubs.DeserializeSignature(prep.Signature)
+	bpk := [96]byte{}//将PublicKey转为[96]byte
+	for i := 0; i < len(bpk); i++{
+		bpk[i] = prep.PublicKey[i]
+	}
+	pk2, _ := g2pubs.DeserializePublicKey(bpk)
+	bsig := [48]byte{}//将Signature转为[48]byte
+	for i := 0; i < len(bsig); i++{
+		bsig[i] = prep.Signature[i]
+	}
+	sig1, _ := g2pubs.DeserializeSignature(bsig)
 	instance.pks = append(instance.pks, pk2)
-	instance.sigs = append(instance.sigs, sig2)
+	instance.sigs = append(instance.sigs, sig1)
 	instance.ids = append(instance.ids, prep.ReplicaId)
 	
 	//主节点收集到足够的prepare消息后聚合签名
 	if instance.prepare2_num >= instance.f * 2 {
 		//主节点自己也要签名
-		sk, err := g2pubs.RandKey(rand.Reader)
+		sk, err := g2pubs.RandKey(crand.Reader)
 		if err != nil{
 			fmt.Println("generate key error")
 		}
 		
 		pk := g2pubs.PrivToPub(sk)
-		sig := g2pubs.Sign(prep.BatchDigest, sk)
+		bd := []byte(prep.BatchDigest)
+		sig := g2pubs.Sign(bd, sk)
 		instance.pks = append(instance.pks, pk)
 		instance.sigs = append(instance.sigs, sig)
 		
