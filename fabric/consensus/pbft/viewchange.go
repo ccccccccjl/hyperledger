@@ -455,7 +455,7 @@ func (instance *pbftCore) processNewView() events.Event {
 }
 
 func (instance *pbftCore) processNewView2(nv *NewView) events.Event {
-	logger.Infof("Replica %d accepting new-view to view %d", instance.id, instance.view)
+	/*logger.Infof("Replica %d accepting new-view to view %d", instance.id, instance.view)
 
 	instance.stopTimer()
 	instance.nullRequestTimer.Stop()
@@ -513,7 +513,7 @@ func (instance *pbftCore) processNewView2(nv *NewView) events.Event {
 
 	instance.startTimerIfOutstandingRequests()
 
-	logger.Debugf("Replica %d done cleaning view change artifacts, calling into consumer", instance.id)
+	logger.Debugf("Replica %d done cleaning view change artifacts, calling into consumer", instance.id)*/
 
 	return viewChangedEvent{}
 }
