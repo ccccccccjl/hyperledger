@@ -143,7 +143,7 @@ func (op *obcBatch) submitToLeader(req *Request) events.Event {
 	op.logAddTxFromRequest(req)
 	op.reqStore.storeOutstanding(req)
 	op.startTimerIfOutstandingRequests()
-	op.pbft.clientsRequests = append(op.pbft.clientsRequest, req)
+	op.pbft.clientRequests = append(op.pbft.clientsRequest, req)
 	
 	//对于主节点，如果没有正在共识，则判断是否出块
 	if op.pbft.primary(op.pbft.view) == op.pbft.id && op.pbft.activeView{
@@ -352,7 +352,7 @@ func (op *obcBatch) resubmitOutstandingReqs() events.Event {
 	// If we are the primary, and know of outstanding requests, submit them for inclusion in the next batch until
 	// we run out of requests, or a new batch message is triggered (this path will re-enter after execution)
 	// Do not enter while an execution is in progress to prevent duplicating a request
-	if op.pbft.primary(op.pbft.view) == op.pbft.id && op.pbft.activeView && op.pbft.currentExec == nil {
+	/*if op.pbft.primary(op.pbft.view) == op.pbft.id && op.pbft.activeView && op.pbft.currentExec == nil {
 		needed := op.batchSize - len(op.batchStore)
 
 		for op.reqStore.hasNonPending() {
@@ -365,7 +365,7 @@ func (op *obcBatch) resubmitOutstandingReqs() events.Event {
 				}
 			}
 		}
-	}
+	}*/
 	return nil
 }
 
