@@ -1273,7 +1273,6 @@ func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
 		finish := &Finish{
 			View:           instance.view,
 			SequenceNumber: instance.seqNo - 1,
-			BatchDigest:    cert.digest,
 			ReplicaId:      instance.id,
 		}
 		instance.innerBroadcastToPrimary(&Message{Payload: &Message_Finish{Finish: finish}})
