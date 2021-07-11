@@ -142,7 +142,7 @@ func (op *obcBatch) submitToLeader(req *Request) events.Event {
 	op.broadcastMsg(&BatchMessage{Payload: &BatchMessage_Request{Request: req}})
 	op.logAddTxFromRequest(req)
 	op.reqStore.storeOutstanding(req)
-	op.startTimerIfOutstandingRequests()
+	//op.startTimerIfOutstandingRequests()
 	op.pbft.clientsRequests = append(op.pbft.clientsRequests, req)
 	
 	//对于主节点，如果没有正在共识，则判断是否出块
@@ -391,8 +391,11 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 		return op.resubmitOutstandingReqs()
 	case batchTimerEvent:
 		logger.Infof("Replica %d batch timer expired", op.pbft.id)
-		if op.pbft.activeView && (len(op.batchStore) > 0) {
+		/*if op.pbft.activeView && (len(op.batchStore) > 0) {
 			return op.leaderProcReq()
+		}*/
+		if op.pbft.activeView && op.pbft.primary(op.pbft.view) == op.pbft.id{
+			return op.pbft.leaderProcReq()
 		}
 	case *Commit:
 		// TODO, this is extremely hacky, but should go away when batch and core are merged
@@ -445,7 +448,7 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 		// When the state is updated, clear any outstanding requests, they may have been processed while we were gone
 		op.reqStore = newRequestStore()
 		return op.pbft.ProcessEvent(event)
-	case packRequestEvent:
+	case packRequestsEvent:
 		return op.leaderProcReq()
 	default:
 		return op.pbft.ProcessEvent(event)
