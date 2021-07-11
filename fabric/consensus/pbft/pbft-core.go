@@ -881,7 +881,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		logger.Infof("replica %d receives prepare2 message which belong to last block,ignore", instance.id)
 		return nil
 	}
-	logger.Infof("replica %d receives prepare2 message, have received %d, want %d", instance.id, instance.prepare2_num, instance.f * 2)
+	
 	
 	//已发送聚合签名
 	if instance.prepare2_num > instance.f * 2{
@@ -891,6 +891,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	
 	cert := instance.getCert(prep.View, prep.SequenceNumber)
 	instance.prepare2_num++
+	logger.Infof("replica %d receives prepare2 message, have received %d, want %d", instance.id, instance.prepare2_num, instance.f * 2)
 	
 	for _, prevPrep := range cert.prepare {
 		if prevPrep.ReplicaId == prep.ReplicaId {
@@ -1677,6 +1678,7 @@ func (instance *pbftCore) updateViewChangeSeqNo() {
 }
 
 func (instance *pbftCore) startTimerIfOutstandingRequests() {
+	logger.Infof("startTimerIfOutstandingRequests")
 	if instance.skipInProgress || instance.currentExec != nil {
 		// Do not start the view change timer if we are executing or state transferring, these take arbitrarilly long amounts of time
 		return
@@ -1702,14 +1704,14 @@ func (instance *pbftCore) startTimerIfOutstandingRequests() {
 }
 
 func (instance *pbftCore) softStartTimer(timeout time.Duration, reason string) {
-	logger.Debugf("Replica %d soft starting new view timer for %s: %s", instance.id, timeout, reason)
+	logger.Infof("Replica %d soft starting new view timer for %s: %s", instance.id, timeout, reason)
 	instance.newViewTimerReason = reason
 	instance.timerActive = true
 	instance.newViewTimer.SoftReset(timeout, viewChangeTimerEvent{})
 }
 
 func (instance *pbftCore) startTimer(timeout time.Duration, reason string) {
-	logger.Debugf("Replica %d starting new view timer for %s: %s", instance.id, timeout, reason)
+	logger.Info("Replica %d starting new view timer for %s: %s", instance.id, timeout, reason)
 	instance.timerActive = true
 	instance.newViewTimer.Reset(timeout, viewChangeTimerEvent{})
 }
