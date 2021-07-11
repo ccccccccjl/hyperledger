@@ -395,7 +395,7 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 			return op.leaderProcReq()
 		}*/
 		if op.pbft.activeView && op.pbft.primary(op.pbft.view) == op.pbft.id{
-			return op.pbft.leaderProcReq()
+			return op.leaderProcReq()
 		}
 	case *Commit:
 		// TODO, this is extremely hacky, but should go away when batch and core are merged
