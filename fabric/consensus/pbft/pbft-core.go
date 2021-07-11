@@ -936,7 +936,6 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 			for i := 0; i < len(b); i++{
 				bpks = append(bpks, b[i])
 			}
-			logger.Infof("pk:%v", b)
 		}
 		
 		
@@ -976,14 +975,13 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 
 
 func (instance *pbftCore) recvAck(ack *Ack) error {
-	logger.Infof("Replica %d received prepare from replica %d for view=%d/seqNo=%d",
+	logger.Infof("Replica %d received ack from replica %d for view=%d/seqNo=%d",
 		instance.id, ack.ReplicaId, ack.View, ack.SequenceNumber)
 
 	if instance.primary(ack.View) != ack.ReplicaId {
 		logger.Warningf("Replica %d received prepare not from primary, ignoring", instance.id)
 		return nil
 	}
-	//logger.Infof("replica %d receives ask message", instance.id)
 	if ack.View < instance.view{
 		logger.Infof("replica %d receives ack message from last view, ignore", instance.id)
 		return nil
@@ -1020,7 +1018,6 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		for j := 0; j < 96; j++{
 			bb1[j] = b1[j]
 		}
-		logger.Infof("pk:%v", bb1)
 		pk, _ := g2pubs.DeserializePublicKey(bb1)
 		instance.pks = append(instance.pks, pk)
 	}
