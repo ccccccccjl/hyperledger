@@ -335,6 +335,7 @@ func newPbftCore(id uint64, config *viper.Viper, consumer innerStack, etf events
 	instance.finish_num = 0
 	instance.clientsRequests = []*Request{}
 	instance.notConsensused = 0
+	instance.isConsensus = false
 
 	return instance
 }
