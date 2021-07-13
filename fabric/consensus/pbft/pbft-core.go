@@ -959,7 +959,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 			ReplicaId:      instance.id,
 		}
 		logger.Infof("replica %d sending ack", instance.id)
-		return instance.innerBroadcast(&Message{Payload: &Message_Ack{Ack: ack}})	
+		instance.innerBroadcast(&Message{Payload: &Message_Ack{Ack: ack}})	
 		
 		//上链
 		instance.lastNewViewTimeout = instance.newViewTimeout
