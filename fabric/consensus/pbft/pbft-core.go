@@ -964,20 +964,21 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		
 		//补充cert.prepare和cert.commit
 		for rid := range(ack.Replicas){
-		prep := &Prepare{
-			View:           ack.View,
-			SequenceNumber: ack.SequenceNumber,
-			BatchDigest:    ack.BatchDigest,
-			ReplicaId:      uint64(rid),
+			prep := &Prepare{
+				View:           ack.View,
+				SequenceNumber: ack.SequenceNumber,
+				BatchDigest:    ack.BatchDigest,
+				ReplicaId:      uint64(rid),
+			}
+			cert.prepare = append(cert.prepare, prep)
+			commit := &Commit{
+				View:           ack.View,
+				SequenceNumber: ack.SequenceNumber,
+				BatchDigest:    ack.BatchDigest,
+				ReplicaId:      uint64(rid),
+			}
+			cert.commit = append(cert.commit, commit)
 		}
-		cert.prepare = append(cert.prepare, prep)
-		commit := &Commit{
-			View:           ack.View,
-			SequenceNumber: ack.SequenceNumber,
-			BatchDigest:    ack.BatchDigest,
-			ReplicaId:      uint64(rid),
-		}
-		cert.commit = append(cert.commit, commit)
 	
 		logger.Infof("ready to cimmit.");
 		//上链
