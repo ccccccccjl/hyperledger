@@ -1352,7 +1352,6 @@ func (instance *pbftCore) recvFinish(finish *Finish) events.Event{
 		logger.Infof("replica %d receives enough finish", instance.id)
 		
 		cert := instance.getCert(finish.View, finish.SequenceNumber)
-		instance.notConsensused += len(cert.prePrepare.RequestBatch.Batch)
 		
 		instance.prepare2_num = 0
 		instance.finish_num = 0
