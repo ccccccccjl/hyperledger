@@ -1351,7 +1351,7 @@ func (instance *pbftCore) recvFinish(finish *Finish) events.Event{
 		instance.seqNo++
 		logger.Infof("replica %d receives enough finish", instance.id)
 		
-		cert := instance.getCert(finish.View, finish.SequenceNumber)
+		//cert := instance.getCert(finish.View, finish.SequenceNumber)
 		
 		instance.prepare2_num = 0
 		instance.finish_num = 0
