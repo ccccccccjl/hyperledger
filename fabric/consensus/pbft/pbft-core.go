@@ -1308,14 +1308,14 @@ func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
 	//非主节点发送finish
 	if instance.id != instance.primary(instance.view){
 		logger.Infof("repplica %d sending finish", instance.id)
-		
+		instance.seqNo++
 		finish := &Finish{
 			View:           instance.view,
 			SequenceNumber: instance.seqNo,
 			ReplicaId:      instance.id,
 		}
 		instance.innerBroadcastToPrimary(&Message{Payload: &Message_Finish{Finish: finish}})
-		instance.seqNo++
+		
 	}
 }
 
@@ -1323,7 +1323,7 @@ func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
 
 
 func (instance *pbftCore) recvFinish(finish *Finish) events.Event{
-	if finish.View != instance.view || finish.SequenceNumber != instance.seqNo{
+	if finish.View != instance.view || finish.SequenceNumber != instance.seqNo + 1{
 		return nil
 	}
 	instance.finish_num++
