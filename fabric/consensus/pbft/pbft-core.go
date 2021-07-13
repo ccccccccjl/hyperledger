@@ -997,8 +997,8 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 
 
 func (instance *pbftCore) recvAck(ack *Ack) error {
-	logger.Infof("Replica %d received ack from replica %d for view=%d/seqNo=%d",
-		instance.id, ack.ReplicaId, ack.View, ack.SequenceNumber)
+	logger.Infof("Replica %d received ack from replica %d for view=%d/seqNo=%d, seqNo:%d",
+		instance.id, ack.ReplicaId, ack.View, ack.SequenceNumber, instance.seqNo)
 
 	if instance.primary(ack.View) != ack.ReplicaId {
 		logger.Warningf("Replica %d received prepare not from primary, ignoring", instance.id)
