@@ -1347,7 +1347,7 @@ func (instance *pbftCore) recvFinish(finish *Finish) events.Event{
 		return nil
 	}
 	instance.finish_num++
-	logger.Infof("replica %d receives finish,view=%d/seqNo=%d", instance.id, finish.View, finish.SequenceNumber)
+	logger.Infof("replica %d receives finish,view=%d/seqNo=%d, have %d, want %d", instance.id, finish.View, finish.SequenceNumber, instance.finish_num, instance.N / 2)
 	
 	//开始打包新区块
 	if instance.finish_num == instance.N / 2{
