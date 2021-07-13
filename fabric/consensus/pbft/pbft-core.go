@@ -1180,15 +1180,15 @@ func (instance *pbftCore) executeOutstanding2(view uint64, seq uint64) {
 	cert := instance.getCert(view, seq)
 	if cert == nil{
 		logger.Warningf("cert is nil")
-		return nil
+		return 
 	}
 	if cert.prePrepare == nil{
 		logger.Warningf("cert.prePrepare is nil")
-		return nil
+		return 
 	}
 	if len(cert.prepare) < instance.f * 2 + 1{
 		logger.Warningf("len(cert.prepare) < instance.f * 2 + 1")
-		return nil
+		return 
 	}
 	
 	digest := cert.digest
