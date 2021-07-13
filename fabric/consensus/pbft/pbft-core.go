@@ -1008,12 +1008,11 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		logger.Infof("replica %d receives ack message from last view, ignore", instance.id)
 		return nil
 	}
-	if ack.SequenceNumber < instance.seqNo{
+	if ack.SequenceNumber != instance.seqNo + 1{//不是这轮的ack消息
 		logger.Infof("replica %d receives ack message which belong to last block, ignore", instance.id)
 		return nil
 	}
 	
-	logger.Infof("replicas:%d", len(ack.Replicas))
 	if len(ack.Replicas) < instance.f * 2 + 1{
 		logger.Infof("not have enough prepare2, ignore")
 		return nil
