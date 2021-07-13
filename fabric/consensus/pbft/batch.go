@@ -149,11 +149,13 @@ func (op *obcBatch) submitToLeader(req *Request) events.Event {
 	if op.pbft.primary(op.pbft.view) == op.pbft.id && op.pbft.activeView{
 		logger.Infof("isConsensus:%v", op.pbft.isConsensus)
 		if op.pbft.isConsensus == false{
+			op.pbft.isConsensus = true
 			//有足够数量的交易则出块，否则等待一会儿再出块
 			if len(op.pbft.clientsRequests) - op.pbft.notConsensused >= op.batchSize{
 				logger.Infof("leader %d is packing", op.pbft.id)
 				return op.leaderProcReq()
 			}else{
+				logger.Infof("waiting before pack", op.pbft.id)
 				op.startBatchTimer()
 			}
 		}
@@ -309,6 +311,7 @@ func (op *obcBatch) processMessage(ocMsg *pb.Message, senderHandle *pb.PeerID) e
 
 		op.logAddTxFromRequest(req)
 		op.reqStore.storeOutstanding(req)
+		
 		
 		op.pbft.startTimer(op.pbft.requestTimeout, "waiting for pre-prepare")
 		//op.startTimerIfOutstandingRequests()
