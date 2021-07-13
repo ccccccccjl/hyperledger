@@ -311,6 +311,7 @@ func (op *obcBatch) processMessage(ocMsg *pb.Message, senderHandle *pb.PeerID) e
 
 		op.logAddTxFromRequest(req)
 		op.reqStore.storeOutstanding(req)
+		op.pbft.clientsRequests = append(op.pbft.clientsRequests, req)
 		
 		
 		op.pbft.startTimer(op.pbft.requestTimeout, "waiting for pre-prepare")
@@ -453,7 +454,7 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 		return op.pbft.ProcessEvent(event)
 	case packRequestsEvent:
 		//没有需要共识的交易
-		if op.pbft.notConsensused == len(op.pbft.clientsRequests) - 1{
+		if op.pbft.notConsensused == len(op.pbft.clientsRequests){
 			return nil
 		}
 		return op.leaderProcReq()
