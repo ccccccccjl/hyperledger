@@ -1008,7 +1008,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		logger.Infof("replica %d receives ack message from last view, ignore", instance.id)
 		return nil
 	}
-	if ack.SequenceNumber != instance.seqNo + 1{//不是这轮的ack消息
+	if ack.SequenceNumber < instance.seqNo + 1{//不是这轮的ack消息
 		logger.Infof("replica %d receives ack message which belong to last block, ignore", instance.id)
 		return nil
 	}
