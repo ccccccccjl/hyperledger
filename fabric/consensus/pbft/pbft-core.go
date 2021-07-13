@@ -898,7 +898,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	
 	
 	//已发送聚合签名
-	if instance.prepare2_num > instance.f * 2{
+	if instance.prepare2_num > instance.f * 2 + 1{
 		logger.Infof("replica %d has already received enough prepare2 message,ignore", instance.id)
 		return nil
 	}
@@ -930,7 +930,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	instance.ids = append(instance.ids, prep.ReplicaId)
 	
 	//主节点收集到足够的prepare消息后聚合签名
-	if instance.prepare2_num == instance.f * 2 {
+	if instance.prepare2_num == instance.f * 2 + 1 {
 		//将公钥转为[]byte
 		bpks := []byte{}
 		for _, key := range(instance.pks){
