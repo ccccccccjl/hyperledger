@@ -899,7 +899,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	
 	
 	//已发送聚合签名
-	if instance.prepare2_num > instance.f * 2 + 1{
+	if len(instance.ids) >= instance.f * 2 + 1{
 		logger.Infof("replica %d has already received enough prepare2 message,ignore", instance.id)
 		return nil
 	}
@@ -931,7 +931,7 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 	instance.ids = append(instance.ids, prep.ReplicaId)
 	
 	//主节点收集到足够的prepare消息后聚合签名
-	if instance.prepare2_num == instance.f * 2 + 1 {
+	if len(instance.ids) == instance.f * 2 + 1 {
 		//将公钥转为[]byte
 		bpks := []byte{}
 		for _, key := range(instance.pks){
@@ -1012,6 +1012,12 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		logger.Infof("replica %d receives ack message which belong to last block, ignore", instance.id)
 		return nil
 	}
+	
+	logger.Infof("replicas:%d", len(ack.Replicas))
+	if len(ack.Replicas) < instance.f * 2 + 1{
+		logger.Infof("not have enough prepare2, ignore")
+		return nil
+	}
 	/*if !instance.inWV(prep.View, prep.SequenceNumber) {
 		if prep.SequenceNumber != instance.h && !instance.skipInProgress {
 			logger.Warningf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
@@ -1054,7 +1060,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 	
 	//验证成功
 	//补充cert.prepare和cert.commit
-	for rid := range(ack.Replicas){
+	for _, rid := range(ack.Replicas){
 		prep := &Prepare{
 			View:           ack.View,
 			SequenceNumber: ack.SequenceNumber,
