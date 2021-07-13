@@ -712,7 +712,7 @@ func (instance *pbftCore) sendPrePrepare(reqBatch *RequestBatch, digest string) 
 	cert.digest = digest
 	instance.persistQSet()
 	logger.Infof("replica %d is sending pre-prepare message", instance.id)
-	instance.prepare2_num++
+	
 	instance.innerBroadcast(&Message{Payload: &Message_PrePrepare{PrePrepare: preprep}})
 	
 	//主节点自己也要签名
@@ -727,6 +727,7 @@ func (instance *pbftCore) sendPrePrepare(reqBatch *RequestBatch, digest string) 
 	instance.pks = append(instance.pks, pk)
 	instance.sigs = append(instance.sigs, sig)
 	instance.ids = append(instance.ids, instance.id)
+	instance.prepare2_num++
 	//instance.maybeSendCommit(digest, instance.view, n)
 }
 
@@ -961,6 +962,24 @@ func (instance *pbftCore) recvPrepare2(prep *Prepare2) error {
 		logger.Infof("replica %d sending ack", instance.id)
 		instance.innerBroadcast(&Message{Payload: &Message_Ack{Ack: ack}})	
 		
+		//补充cert.prepare和cert.commit
+		for rid := range(ack.Replicas){
+		prep := &Prepare{
+			View:           ack.View,
+			SequenceNumber: ack.SequenceNumber,
+			BatchDigest:    ack.BatchDigest,
+			ReplicaId:      uint64(rid),
+		}
+		cert.prepare = append(cert.prepare, prep)
+		commit := &Commit{
+			View:           ack.View,
+			SequenceNumber: ack.SequenceNumber,
+			BatchDigest:    ack.BatchDigest,
+			ReplicaId:      uint64(rid),
+		}
+		cert.commit = append(cert.commit, commit)
+	
+		logger.Infof("ready to cimmit.");
 		//上链
 		instance.lastNewViewTimeout = instance.newViewTimeout
 		delete(instance.outstandingReqBatches, ack.BatchDigest)
@@ -1051,7 +1070,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		cert.commit = append(cert.commit, commit)
 	}
 	
-	logger.Infof("ready to cimmit.");
+	logger.Infof("ready to cimmit.")
 	//上链
 	instance.lastNewViewTimeout = instance.newViewTimeout
 	delete(instance.outstandingReqBatches, ack.BatchDigest)
