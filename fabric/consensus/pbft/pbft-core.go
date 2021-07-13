@@ -1004,6 +1004,7 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 	instance.stopTimer()
 	cert := instance.getCert(ack.View, ack.SequenceNumber)
 	
+	logger.Infof("now verify signatures.")
 	
 	//验证聚合签名
 	basig := ack.Asig
@@ -1049,6 +1050,8 @@ func (instance *pbftCore) recvAck(ack *Ack) error {
 		}
 		cert.commit = append(cert.commit, commit)
 	}
+	
+	logger.Infof("ready to cimmit.");
 	//上链
 	instance.lastNewViewTimeout = instance.newViewTimeout
 	delete(instance.outstandingReqBatches, ack.BatchDigest)
@@ -1175,9 +1178,19 @@ func (instance *pbftCore) executeOutstanding2(view uint64, seq uint64) {
 	logger.Debugf("Replica %d attempting to executeOutstanding", instance.id)
 	
 	cert := instance.getCert(view, seq)
-	if cert == nil || cert.prePrepare == nil || len(cert.prepare) < 2 * instance.f + 1{
-		return 
+	if cert == nil{
+		logger.Warningf("cert is nil")
+		return nil
 	}
+	if cert.prePrepare == nil{
+		logger.Warningf("cert.prePrepare is nil")
+		return nil
+	}
+	if len(cert.prepare) < instance.f * 2 + 1{
+		logger.Warningf("len(cert.prepare) < instance.f * 2 + 1")
+		return nil
+	}
+	
 	digest := cert.digest
 	reqBatch := instance.reqBatchStore[digest]
 	l := len(cert.prePrepare.RequestBatch.Batch)
