@@ -1320,7 +1320,7 @@ func (instance *pbftCore) execDoneSync(view uint64, seq uint64) {
 	instance.pks = []*g2pubs.PublicKey{}//存储各个节点的公钥
 	instance.ids = []uint64{}//签名的对应节点
 	
-	
+	logger.Infof("notConsenssused:%d, clientsRequests:%d", instance.notConsensused, len(instance.clientsRequests))
 	
 	//非主节点发送finish
 	if instance.id != instance.primary(instance.view){
